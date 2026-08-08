@@ -30,7 +30,7 @@ DanmuFree 是用户**从零自建**的 B站 / 抖音直播间弹幕桌面客户�
 - **第三方包**：`CommunityToolkit.Mvvm` + `QRCoder` + `NAudio`（弹幕朗读播放，App 层）+ `System.Speech`（内置 TTS 引擎，Windows SAPI，App 层）。
 
 ## Spec / 开发规范
-- **测试约束**：App 是 net8.0-windows（WPF），Tests 是 net8.0，**Tests 不能引用 App** → **Core 层 TDD**（FakeHttpHandler 模拟 HTTP / Set-Cookie；协议帧用真实抓包样本做回归），**App 层（窗口 / UI / VM）不单测**，以 `dotnet build` **0 错误 0 警告** + 用户冒烟为准。
+- **测试约束**：App 是 net8.0-windows（WPF），Tests 是 net8.0，**Tests 不能引用 App** → **Core 层 TDD**（FakeHttpHandler 模拟 HTTP / Set-Cookie；协议帧用真实抓包样本做回归），**App 层（窗口 / UI / VM）不单测**，以 `dotnet build` **0 错误 0 警告** + 用户冒烟为准。跑 `dotnet test`（Core 层共 108 单测）。
 - **B站协议变更排查**：HTTP 接口先 `curl` 验证字段路径再编码（历史验证点：`getInfoByRoom` 的 `data.room_info.room_id`、`getDanmuInfo`、`qrcode/generate`+`poll`、`finger/spi` 的 `b_3`、登录成功响应的 `Set-Cookie` 头）。
 - **WPF 要点**：
   - 无边框透明窗（`WindowStyle=None` + `AllowsTransparency=True`）；拖动用 `PreviewMouseLeftButtonDown`（隧道，先于子元素）+ `DragMove` + `try/catch InvalidOperationException`，处理器里排除按钮（`ButtonBase`）。
@@ -56,6 +56,13 @@ DanmuFree 是用户**从零自建**的 B站 / 抖音直播间弹幕桌面客户�
 ## 用户偏好
 - 自 phase3 起：新功能**直接写 spec + 实现，不停下来确认方案**（"不用再让我确认了"）。
 - 合并习惯：ff-merge + 删特性分支（`feat/phase3-control-window` 已并入 `master` 并删除；在 `master` 上开发）。
+
+## 已知限制（用户向，从 README 迁入）
+- **账号昵称 / 等级**：B站风控接口（nav / space）限制，暂只显示从 cookie 解析的 UID，拿不到昵称。
+- **匿名连接易被风控**：B站建议扫码登录带 cookie；抖音目前匿名可用。
+- **系统内置 TTS（SAPI）音色取决于系统已装的语音包**：Win 中文版自带 Microsoft Huihui（zh-CN）；英文版可能无中文语音（读中文变调/不读），需在「设置 → 时间和语言 → 语音」装中文语音包。要音色逼真用 GPT-SoVITS。
+- **抖音「赞」恒「-」/「看过」可能暂空**：平台 WS 只推增量点赞、不推累计总数；「看过」要等房间推 `RoomUserSeqMessage`，个别挂机房不推。
+- 协议变更 / 签名维护 / GPT-SoVITS 实测坑等**开发侧**风险，见上文「Spec / 开发规范」节（B站协议变更排查、抖音签名维护、GPT-SoVITS V2 /tts 协议）。
 
 ## 后续（roadmap）
 - **⏳ WebView2 去 Node**（详细 plan：`WEBVIEW2_PLAN.md`，自包含可随时开工）：系统 WebView2 跑官方 webmssdk 取 X-Bogus，替换 `DouyinSigner`(node) + `sign/`(jsdom)。新增 `WebView2Signer : IDouyinSigner`（Core 不动）。完成后去掉 `node.exe`(80MB)+jsdom(25MB)，分发降到 ~155MB、接近单 exe、抗算法变更。
