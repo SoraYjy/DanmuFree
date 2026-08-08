@@ -1,0 +1,12 @@
+bin/
+obj/
+.vs/
+*.user
+node_modules/
+# 分发打包产物（绿色文件夹），不入库
+dist/
+# probe/ 是一次性协议探针（scratch），代码已迁入 Core；保留磁盘文件供参考，不入版本库
+probe/
+
+# 开发过程草稿（superpowers 生成的 plan/spec，含本机路径）—— 磁盘保留，但不进公开仓库
+docs/

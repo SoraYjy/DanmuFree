@@ -1,0 +1,50 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\DanmuFree.Core\DanmuFree.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+    <PackageReference Include="QRCoder" Version="1.8.0" />
+    <PackageReference Include="NAudio" Version="2.2.1" />
+    <PackageReference Include="System.Speech" Version="8.0.0" />
+  </ItemGroup>
+
+  <!-- 抖音签名 sidecar：sign/sign_runner.js 由 node 子进程跑（webmssdk + jsdom），
+       随 exe 分发到输出目录。node_modules（含 jsdom）在本地存在即复制，不进版本库。 -->
+  <ItemGroup>
+    <Content Include="sign\**" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+
+    <!-- 产物名 / 元数据（右键 exe → 属性 → 详细信息可见） -->
+    <AssemblyName>DanmuFree</AssemblyName>
+    <RootNamespace>DanmuFree.App</RootNamespace>
+    <Version>1.0.0</Version>
+    <Company>Sora</Company>
+    <Product>DanmuFree</Product>
+    <Description>B站 / 抖音直播间弹幕桌面客户端</Description>
+    <Copyright>Copyright © 2026 Sora</Copyright>
+
+    <!-- exe 图标（资源在仓库根 assets/app.ico，由 scripts/make_ico.py 生成） -->
+    <ApplicationIcon>..\..\assets\app.ico</ApplicationIcon>
+
+    <!-- self-contained 单文件 publish：把 5 个 WPF 原生 dll 也折进 exe，
+         产出从「exe + 5 dll + sign + node」精简成「exe + sign + node」 -->
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+  </PropertyGroup>
+
+  <!-- Release 不带 pdb（调试符号不进分发包） -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <DebugType>none</DebugType>
+    <DebugSymbols>false</DebugSymbols>
+  </PropertyGroup>
+
+</Project>

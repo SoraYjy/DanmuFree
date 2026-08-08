@@ -1,0 +1,114 @@
+<Window x:Class="DanmuFree.App.Views.DanmuWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:m="clr-namespace:DanmuFree.Core.Models;assembly=DanmuFree.Core"
+        xmlns:c="clr-namespace:DanmuFree.App.Converters"
+        Title="DanmuFree" Height="600" Width="480"
+        Topmost="{Binding EffectiveTopmost}"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ResizeMode="CanResizeWithGrip"
+        ShowInTaskbar="True">
+  <Window.Resources>
+    <c:MessageTypeToBrushConverter x:Key="TypeBrush"/>
+    <c:OpacityToBackgroundConverter x:Key="OpacityToBg"/>
+    <c:TimeIfShownConverter x:Key="TimeIfShown"/>
+    <DataTemplate DataType="{x:Type m:RichMessage}">
+      <TextBlock TextWrapping="Wrap"
+                 Foreground="{Binding Type, Converter={StaticResource TypeBrush}}">
+        <Run Foreground="#FF888888">
+          <Run.Text>
+            <MultiBinding Converter="{StaticResource TimeIfShown}">
+              <Binding Path="Time"/>
+              <Binding Path="DataContext.ShowTime" RelativeSource="{RelativeSource AncestorType=Window}"/>
+            </MultiBinding>
+          </Run.Text>
+        </Run>
+        <Run Text="{Binding Medal}" Foreground="#FFFFD54F"/><Run Text=" "/>
+        <Run Text="{Binding UserName}"
+             FontFamily="{Binding DataContext.UserNameFontFamily, RelativeSource={RelativeSource AncestorType=Window}}"
+             Foreground="{Binding DataContext.UserNameColor, RelativeSource={RelativeSource AncestorType=Window}}"/><Run Text=": "/>
+        <Run Text="{Binding Text}"
+             FontFamily="{Binding DataContext.DanmuFontFamily, RelativeSource={RelativeSource AncestorType=Window}}"
+             Foreground="{Binding DataContext.DanmuColor, RelativeSource={RelativeSource AncestorType=Window}}"/>
+        <Run Text="{Binding Extra}" FontWeight="Bold"/>
+      </TextBlock>
+    </DataTemplate>
+    <!-- 悬浮时变淡 + 鼠标穿透（统计条：悬浮时也显示，只更透、不挡操作） -->
+    <Style x:Key="DimWhenFloating" TargetType="FrameworkElement">
+      <Style.Triggers>
+        <DataTrigger Binding="{Binding IsFloating}" Value="True">
+          <Setter Property="Opacity" Value="0.4"/>
+          <Setter Property="IsHitTestVisible" Value="False"/>
+        </DataTrigger>
+      </Style.Triggers>
+    </Style>
+  </Window.Resources>
+  <Grid>
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto"/>
+      <RowDefinition Height="*"/>
+    </Grid.RowDefinitions>
+
+    <!-- 顶部常驻统计条：在线/看过/赞（不必开控制窗即可见）。悬浮（沉浸）时变淡显示、鼠标穿透。 -->
+    <Border Grid.Row="0" Background="#CC1E1E1E" Padding="8,3"
+            PreviewMouseLeftButtonDown="OnBackgroundMouseDown"
+            Style="{StaticResource DimWhenFloating}">
+      <StackPanel Orientation="Horizontal">
+        <TextBlock VerticalAlignment="Center" Margin="0,0,12,0" Foreground="#FFCCCCCC" FontSize="12">
+          <Run Text="在线 "/><Run Text="{Binding OnlineCount}" Foreground="#FF4FC3F7" FontWeight="Bold"/>
+        </TextBlock>
+        <TextBlock VerticalAlignment="Center" Margin="0,0,12,0" Foreground="#FFCCCCCC" FontSize="12">
+          <Run Text="看过 "/><Run Text="{Binding WatchedCount}" Foreground="#FFC1FF" FontWeight="Bold"/>
+        </TextBlock>
+        <TextBlock VerticalAlignment="Center" Foreground="#FFCCCCCC" FontSize="12">
+          <Run Text="赞 "/><Run Text="{Binding LikesCount}" Foreground="#FFFF8A80" FontWeight="Bold"/>
+        </TextBlock>
+      </StackPanel>
+    </Border>
+
+    <!-- 弹幕区：背景层拖动靠这里。隧道事件 PreviewMouseLeftButtonDown 先于 ListBox 处理。
+         背景绑 EffectiveOpacity：悬浮时更透，退出复原。
+         悬浮时 IsHitTestVisible=False：整个内容区鼠标穿透（不能拖/不能选/点穿下层），只剩「还原」可点。 -->
+    <Border Grid.Row="1" Background="{Binding EffectiveOpacity, Converter={StaticResource OpacityToBg}}"
+            PreviewMouseLeftButtonDown="OnBackgroundMouseDown">
+      <Border.Style>
+        <Style TargetType="Border">
+          <Style.Triggers>
+            <DataTrigger Binding="{Binding IsFloating}" Value="True">
+              <Setter Property="IsHitTestVisible" Value="False"/>
+            </DataTrigger>
+          </Style.Triggers>
+        </Style>
+      </Border.Style>
+      <!-- 悬浮时禁用命中测试：消息选不中，且鼠标穿透到背景层。 -->
+      <ListBox x:Name="MessageList" ItemsSource="{Binding Messages}" Background="Transparent" BorderThickness="0"
+               FontFamily="{Binding FontFamily}" FontSize="{Binding FontSize}"
+               VirtualizingStackPanel.IsVirtualizing="True"
+               VirtualizingStackPanel.VirtualizationMode="Recycling"
+               VirtualizingStackPanel.ScrollUnit="Pixel"
+               ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+        <ListBox.Resources>
+          <!-- 悬浮时滚动条透明占位（不改变视口宽度，避免虚拟化列表 re-realize 抖动）；非悬浮正常显示便于回看 -->
+          <Style TargetType="ScrollBar">
+            <Style.Triggers>
+              <DataTrigger Binding="{Binding IsFloating}" Value="True">
+                <Setter Property="Opacity" Value="0"/>
+              </DataTrigger>
+            </Style.Triggers>
+          </Style>
+        </ListBox.Resources>
+        <ListBox.Style>
+          <Style TargetType="ListBox">
+            <Style.Triggers>
+              <DataTrigger Binding="{Binding IsFloating}" Value="True">
+                <Setter Property="IsHitTestVisible" Value="False"/>
+              </DataTrigger>
+            </Style.Triggers>
+          </Style>
+        </ListBox.Style>
+      </ListBox>
+    </Border>
+  </Grid>
+</Window>

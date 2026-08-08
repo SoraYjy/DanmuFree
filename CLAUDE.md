@@ -1,0 +1,64 @@
+# CLAUDE.md — DanmuFree
+
+## 项目背景
+DanmuFree 是用户**从零自建**的 B站 / 抖音直播间弹幕桌面客户端（Windows / WPF / .NET 8），作为商业弹幕助手的自用替代品。**双平台、个人自用**：B站为主，抖音为第二数据源，共用同一套展示管道。
+
+核心设计决策：**协议层完全自写、零第三方直播库**。B站协议会频繁变动（本项目周期内已踩到 `getRoomInfoOld` 弃用、op3 在线失真、登录 cookie 改走 `Set-Cookie`、`INTERACT_WORD_V2` 把交互信息塞进 `data.pb` protobuf 等）；抖音 WS 握手要 X-Bogus 签名（webmssdk 反调试 JS）——依赖第三方库会腐烂；自写 + 单测，协议变了改一处即可（抖音签名换 `sign/sign.js` 即可）。
+
+## 仓库布局
+- `src/DanmuFree.Core/`（net8.0，纯逻辑，零第三方）
+  - `Protocol/`：FrameCodec（16 字节大端帧）、PayloadCodec（zlib/brotli 解压）、PacketDecoder（递归解码）、MessageParser（cmd→RichMessage；DANMU_MSG 勋章；**INTERACT_WORD_V2 解码 `data.pb` protobuf**：顶层 f2=uname、f5=msg_type）、RoomResolver（`getInfoByRoom` 解析真实 room_id）、StatsService（统计轮询）。
+  - `Client/`：BilibiliDanmuClient（WebSocket 连接 / 认证 / 心跳 / 收包 / 指数退避重连）；**DouyinDanmuClient**（抖音 WS：房间解析→node 签名→握手→心跳→收帧解码→ack→RichMessage→重连，公开面与 B站 client 一致）。
+  - `Protocol/`（抖音新增）：**DouyinProto**（手写 protobuf varint：PushFrame/Response/Message/Chat/Gift/RoomUserSeq 解码 + BuildAck/BuildHeartbeat）、**DouyinSign**（纯 C# 算签名素材：13 字段 param→md5=X-MS-STUB + BuildConnectUrl[域名 `-ws-web-`] + `IDouyinSigner` 抽象）、**DouyinMapper**（method→RichMessage）、**DouyinRoomResolver**（主页抠 ttwid + enter 接口取真实 room_id，**不需 a_bogus**）。
+  - `Login/`：LoginService（扫码登录，**优先从 `Set-Cookie` 响应头提取 cookie**，`data.url` query 作兜底）、QrStatus、QrInfo。
+  - `Models/`：RichMessage（record）、MessageType。
+- `src/DanmuFree.App/`（net8.0-windows，WPF）
+  - `Views/`：DanmuWindow（弹幕显示，纯展示窗）、NotifyWindow（进场/关注独立窗，纯展示窗）、ControlWindow（**常驻**控制/设置，任务栏可最小化，标题栏拖动）、LoginDialog（扫码）。
+  - `ViewModels/`：DanmuViewModel（MVVM，CommunityToolkit.Mvvm；含 EffectiveTopmost/EffectiveOpacity / EffectiveNotifyTopmost/EffectiveNotifyOpacity 等「进悬浮自动生效、退出还原」的派生属性；两个集合 Messages/NotifyMessages + 两个 pump）。
+  - `Services/`：AppSettings、SettingsService（%AppData%/DanmuFree/settings.json）、FileLogger、UiBatchPump（Channel→100ms 批量刷 UI）、QrImageRenderer、**WindowClickThrough**（Win32 `WS_EX_TRANSPARENT` 鼠标穿透）、**DouyinSigner**（实现 `IDouyinSigner`：md5→node 子进程跑 `sign/sign_runner.js`→X-Bogus）。
+  - `sign/`：抖音签名 sidecar —— `sign.js`（webmssdk 1.0.0.53 + jsdom 补环境，saermart 逆向）+ `sign_runner.js` + `package.json` + `node_modules/jsdom`（csproj `Content Include sign\**` 随 exe 分发；node_modules 本地存在即复制、gitignore 不入库）。
+  - `Converters/`：MessageTypeToBrush、OpacityToBackground、TimeIfShown。
+- `tests/DanmuFree.Tests/`（net8.0）：Core 层单测 + `Helpers/FakeHttpHandler`（支持 `.When(url, json)` / `.WithSetCookies(url, ...)`）。
+
+## 架构要点
+- **生产者-消费者管道**：WebSocket 收包 → Core 解码为 RichMessage → `Channel<RichMessage>`（bounded 2000，DropOldest）→ `UiBatchPump` 每 ~100ms 或满 50 条批量刷 UI（高弹幕量不卡）。
+- **三窗共享 ViewModel**：App 建一个 DanmuViewModel，DanmuWindow（主窗，纯展示）+ NotifyWindow（进场/关注/礼物/SC）+ ControlWindow（常驻控制）共享。**两路管道**：弹幕聊天进 `Messages`（主弹幕流**只剩 Danmu**）；**事件流**——进场/关注（`MessageType.Interact`）+ 礼物（`MessageType.Gift`）+ SC（`MessageType.SuperChat`，B站）——进 `NotifyMessages`（`OnMessageReceived` 按类型路由；进场/关注/礼物/SC 可分别开关 ShowEntry/ShowFollow/ShowGift/ShowSuperChat；都不进主弹幕流）。DanmuWindow 拥有 NotifyWindow 生命周期（按 ShowNotifyWindow show/hide，× 与 Alt+F4 都只隐藏、不销毁）。
+- **平台切换（B站/抖音）**：DanmuViewModel 持 `Platform` 枚举 + `_client`(B站)/`_douyinClient`(抖音) 两个 client 字段；`ConnectAsync` 按平台选房间号 + client，两 client 都暴露 `MessageReceived`/`ConnectionStateChanged`、共用 `OnMessageReceived` 路由。抖音匿名（无 Cookie）；**统计走 WS 推送**（`DouyinDanmuClient.StatsUpdated` 事件，独立于 RichMessage 流）：`WebcastRoomUserSeqMessage`(f3=当前在线、f11=累计看过) + `WebcastRoomStatsMessage`(f5=在线) → VM 的 `OnDouyinStats` 更新 在线/看过；**点赞总数抖音不推**（只推增量 `WebcastLikeMessage`），故抖音「赞」恒「-」。B站 在线/看过/赞仍由 StatsService 60s 轮询。抖音签名（`DouyinSigner`，App 层调 node）经 Core 的 `IDouyinSigner` 注入 client——Core 不依赖 JS 环境，md5 素材纯 C# 可单测。ControlWindow 顶部 RadioButton（`EnumToBoolConverter`）切平台，房间输入框按 `IsDouyin`/`IsBilibili` 切换可见，Cookie 段在抖音时整段隐藏（B站 时显示，Cookie 框**只读** `IsReadOnly=True`，扫码登录自动填入、不可手改）。
+- **ControlWindow 常驻**：随主窗启动、独立任务栏项、`—` 最小化（从任务栏恢复）、`×` = 退出程序（`Application.Shutdown`）。关主窗 = 退出 app（SaveSettings + 写回三窗几何）。**可调大小**（`ResizeMode=CanResizeWithGrip`，右下角拖拽缩放；设置多时拉大即可看全）+ 几何持久化（位置/大小存 settings.json，启动还原 + 屏内夹取，镜像弹幕/通知窗的 `ApplySavedGeometry`/Closing 写回）。
+- **窗口几何持久化**：弹幕窗 + 通知窗 + **控制窗** 的位置/大小存 settings.json，启动还原并做屏内夹取（拔显示器不飞屏）；**悬浮态两窗各自持久化**（`IsFloating` / `IsNotifyFloating` 存 settings.json，关闭时悬浮则下次启动仍悬浮——悬浮=鼠标穿透，退出在 ControlWindow 取消勾选）。
+- **弹幕朗读（TTS，独立第三管道）**：`OnMessageReceived` → `EnqueueForTts` 按 `MessageType` 分流：Danmu/SC 走 `TtsTextBuilder`（Core 纯逻辑、可单测：按 `TtsReadFlags`[含 **ReadUserName**] 转文本，`ReadUserName=false` 只读正文）；**礼物走 `GiftReadAggregator`（Core 纯逻辑）+ `GiftTtsPump`（App，`System.Threading.Timer` debounce）——连送同用户+同礼物在 1200ms 窗口累加成一条「xx 送了 N 个 yy」、停顿后才念（不再被刷屏读 100 次），礼物始终带用户名（事件型，不受 ReadUserName 影响）** → `Channel<string>`（bounded、DropOldest：洪水时丢旧保新）→ `TtsSpeaker`（App，NAudio 串行播放，一条播完再取下一条）→ **`ITtsClient` 双引擎**：① `GptSoVitsClient`（Core HTTP，**GET+query** 到本地 GPT-SoVITS `/tts` 取 wav 流；POST JSON 被服务拒，协议见下「GPT-SoVITS V2 /tts 协议」）；② `SystemSpeechTtsClient`（**App 层、Windows SAPI / System.Speech**，零配置、**免参考音频**，合成到内存 WAV 复用同一条 NAudio 管道；`TtsOptions.Speed`→SAPI Rate 映射，`ListVoiceNames()` 枚举系统已装音色如 Huihui/Zira/David）。引擎/音色/服务地址在「朗读」TAB 选（VM `TtsEngine`="GptSoVits"/"System"，`StringEqualsConverter` 切控件可见），变更即 `RestartTtsIfRunning` 重建底层 client。**读聊天/SC/礼物，不读进场/关注**；朗读开关（`TtsEnabled` + `TtsReadFlags`）**独立于显示开关**（ShowEntry/ShowFollow/ShowGift/ShowSuperChat），即「不显示也可读」「显示但不读」均可。
+- **第三方包**：`CommunityToolkit.Mvvm` + `QRCoder` + `NAudio`（弹幕朗读播放，App 层）+ `System.Speech`（内置 TTS 引擎，Windows SAPI，App 层）。
+
+## Spec / 开发规范
+- **测试约束**：App 是 net8.0-windows（WPF），Tests 是 net8.0，**Tests 不能引用 App** → **Core 层 TDD**（FakeHttpHandler 模拟 HTTP / Set-Cookie；协议帧用真实抓包样本做回归），**App 层（窗口 / UI / VM）不单测**，以 `dotnet build` **0 错误 0 警告** + 用户冒烟为准。
+- **B站协议变更排查**：HTTP 接口先 `curl` 验证字段路径再编码（历史验证点：`getInfoByRoom` 的 `data.room_info.room_id`、`getDanmuInfo`、`qrcode/generate`+`poll`、`finger/spi` 的 `b_3`、登录成功响应的 `Set-Cookie` 头）。
+- **WPF 要点**：
+  - 无边框透明窗（`WindowStyle=None` + `AllowsTransparency=True`）；拖动用 `PreviewMouseLeftButtonDown`（隧道，先于子元素）+ `DragMove` + `try/catch InvalidOperationException`，处理器里排除按钮（`ButtonBase`）。
+  - **值优先级**：本地绑定 > Style.Triggers；需要 trigger 覆盖绑定时，把目标属性移入 Style 或用 MultiDataTrigger。
+  - **ListBox 虚拟化**：`IsVirtualizing=True` + `VirtualizationMode=Recycling` + `ScrollUnit=Pixel`（弹幕多时性能关键）。**悬浮隐藏滚动条用 ScrollBar `Opacity=0` 占位**，不要用 `VerticalScrollBarVisibility=Hidden`（会改变视口宽度、触发虚拟化 re-realize 抖动 / 历史空白 bug）。
+  - **Run（Inline）没有 Visibility 属性**：隐藏行内文本用空 `Text`（MultiBinding + converter）。
+  - 自动滚动用 `ScrollViewer.ScrollToBottom`（`DispatcherPriority.Render` + `UpdateLayout`），不要依赖 `BringIntoView` / `ContainerByIndex`（在 `IsHitTestVisible=False` / 虚拟化下不可靠）。
+  - **悬浮 = 真·鼠标穿透（`WS_EX_TRANSPARENT`）**：分层透明窗即使元素 `IsHitTestVisible=False`，OS 层仍占屏幕区域、点击仍激活本窗 HWND（表现：游戏里点中弹幕窗 → 游戏失焦）。必须 `WindowClickThrough.SetPassThrough` 加 `WS_EX_TRANSPARENT`（WPF 透明窗本就是 layered，满足其生效前提）才能在 OS 层放行点击、不抢焦点。代价：悬浮后整窗不可点——故悬浮开关放 ControlWindow 各 TAB、显示窗本身无控件，退出悬浮靠取消勾选。
+- **INTERACT_WORD_V2 = `data.pb`**：直播流进场/关注现发 `INTERACT_WORD_V2`，JSON 里**没有** msg_type/uname，交互信息编码在 `data.pb`（base64 protobuf）：顶层 f2=uname、f5=msg_type（1进入/2关注/3分享）。`MessageParser.DecodeInteractPb` 只走顶层、只取这两个字段（实测 7777 等房间）。
+- **抖音 WS 协议**（探针实测，详 `DOUYIN_PLAN.md`）：① 房间解析 `DouyinRoomResolver`——GET `live.douyin.com/{web_rid}` 抠 `ttwid`，GET `webcast/room/web/enter` 抠 `"id_str":"(\d{15,25})"`（真实 room_id，**不需 a_bogus**；HTML 里 `roomId` 是 SSR 占位 `$undefined` 不能用）。② signature(X-Bogus)——`DouyinSign`：从不含 signature 的 WSS URL query 按 13 字段（`live_id,aid,version_code,webcast_sdk_version,room_id,sub_room_id,sub_channel_id,did_rule,user_unique_id,device_platform,device_type,ac,identity`）拼 `"k=v,k=v,..."`→MD5 小写hex=`X-MS-STUB`→`DouyinSigner` 调 node `sign/sign_runner.js` 跑 webmssdk `getSign`→`X-Bogus`（webmssdk 反调试只认 jsdom，Jint 撞 >32000 层递归）。③ WS `wss://webcast3-ws-web-lf.douyin.com/webcast/im/push/v2/`（域名必带 `-ws-web-`，老 `webcast3-normal-lf` 已 NXDOMAIN），headers UA+Origin+`Cookie: ttwid=`。握手 101=签名过；200+`auth failed`=签名错。④ protobuf（手写 varint，`DouyinProto`）：PushFrame f2=log_id/f8=payload(gzip)；Response f1=messages/f5=internal_ext/f9=need_ack；Message f1=method/f2=payload；ChatMessage f2=user(User.f3=nick)/f3=content；Member/Social f2=user；GiftMessage f7=user/f15=gift(f16=name)/f5=repeat_count/f29=total_count；RoomUserSeqMessage f3=total。⑤ **ack=PushFrame{f2=log_id,f7="ack",f8=internal_ext(utf8)}**（缺 f7 → cursor 不推进、每帧重推状态；不 ack → 服务端断）。⑥ 心跳 10s = PushFrame{f8=gzip(空)}。⑦ 重连需重新签名。method→RichMessage 见 `DouyinMapper`：Chat→Danmu（附**用户等级**：抖音等级是 `pay_grade`(f23) 图标，数字嵌在 URL `new_user_grade_level_v1_N.png`，`DouyinProto.ReadUserGradeLevel` 递归扫字符串 regex 抠 N，复用勋章位显示「Lv.N」；`User.level`(f6) 实测恒 0 不可用）、Member→Interact「进入直播间」、Social→Interact「关注了主播」（复用 B站字面量）、Gift。**统计类不进 RichMessage**：`WebcastRoomUserSeqMessage`(f3 当前在线 varint / **f11 累计看过=string**，服务端已格式化如「1.3万」，直接显示)、`WebcastRoomStatsMessage`(f5 在线) 由 `DouyinDanmuClient.StatsUpdated` 推 `DouyinRoomStats(Online long?, Watched string?)`；`WebcastLikeMessage` 是增量点赞（无累计总数，故「赞」不显示）。
+- **抖音签名维护**：webmssdk 版本 / 算法会变（_signature→X-Bogus→a_bogus）。用 node 跑官方 JS 的红利：算法变了不用逆向，换 `sign/sign.js`（跟 saermart/DouyinLiveWebFetcher；GitHub 被墙走 gitee `iuact` 镜像 raw）。webmssdk 反调试升级时可能要补 jsdom 环境。
+- **GPT-SoVITS V2 `/tts` 协议**（2026-08 探针+实测）：本地启动 `python api_v2.py -a 127.0.0.1 -p 9880 -c GPT_SoVITS/configs/tts_infer.yaml`（默认 9880；WebUI 是 9874、**不提供 /tts**）。① **必须 GET + query**：`GET /tts?text=&text_lang=&ref_audio_path=&prompt_text=&prompt_lang=&speed_factor=&media_type=wav&streaming_mode=false` → wav 流；**POST JSON body 被服务一律拒**（`There was an error parsing the body`），字段全对也拒。② 字段：`text`、`text_lang`(zh/en/ja/ko/yue)、`ref_audio_path`（**必填**——V2 无"默认音色"，空→400 `ref_audio_path is required`）、`prompt_text`、`prompt_lang`(必填)、`speed_factor`（**是 `speed_factor` 不是 `speed`**）、`temperature`（采样温度=**语气表现力**，默认 1.0；高更丰富多变、低更平稳；**基础音色仍由参考音频定，V2 无独立"情绪"开关**）、`media_type`=wav、`streaming_mode`=false。③ **坑 A**：参考音频必须 **3~10 秒**（超范围→400 `参考音频在3~10秒范围外，请更换！`）。④ **坑 B**：弹幕含英文且被标点/空格切出独立英文片段 → 走英文分词 → 需 NLTK `averaged_perceptron_tagger_eng`；整合包默认没下 → 400 `Resource 'averaged_perceptron_tagger_eng' not found`。修复：在 GPT-SoVITS 的 venv 跑 `python -c "import nltk; nltk.download('averaged_perceptron_tagger_eng'); nltk.download('punkt')"`（纯中文 / 英文紧贴中文如 `sora哥哥` 不触发，故表现"含英文时好时坏"）。⑤ `GptSoVitsClient` 失败时把服务返回体写进异常（→ TtsSpeaker catch → FileLogger），`%AppData%/DanmuFree/log.txt` 可见 400 详情。
+- **协议排查用一次性探针**：WS 帧没法 curl，要确认真实格式时，临时建 console 项目（`probe/`）引用 Core、复用 RoomResolver+FrameCodec+PacketDecoder 连真实房间 dump cmd/body——cookie 让探针**自己读 settings.json**（不进 Claude 上下文），用完即删。本次 V2 的 pb 结构即如此确认。
+- **敏感数据**：`settings.json` 的 Cookie（SESSDATA / DedeUserID / bili_jct）是登录凭证，仅本地处理，勿外传、勿把实际值写入文档 / 记忆。
+
+## 环境关键点
+- 仓库位置 / 工作目录：仓库根目录（git 仓库，公开在 GitHub）。**从仓库根启动 claude**——CLAUDE.md 自动读、bash 命令直接在仓库根跑、无需 `cd` 前缀。
+- **rebuild 前先 `taskkill //F //IM DanmuFree.exe`**：运行中的 app 锁 `DanmuFree.Core.dll`，否则 build 报 MSB3021 文件锁定。
+- 运行：`dotnet run --project src/DanmuFree.App`（产物 exe 名 `DanmuFree.exe`；后台启动的窗口常压在底层，用户双击 exe 更稳）。
+- **打包分发**：`bash pack.sh` → `dist/DanmuFree/`（self-contained 单文件 `DanmuFree.exe`——.NET runtime + 5 个 WPF 原生 dll 全折进 exe——+ `sign/` + `node/node.exe`，~260MB，用户无需装 .NET/Node，解压双击 exe 即用）。`dist/` gitignore 不入库；Release 不带 pdb。**抖音 node**：分发自带 `node/node.exe`（`DouyinSigner` 优先用它、回落 PATH），故用户机不用装 Node。
+- 配置 / 日志：`%AppData%\DanmuFree\`（`settings.json`、`log.txt`）。
+
+## 用户偏好
+- 自 phase3 起：新功能**直接写 spec + 实现，不停下来确认方案**（"不用再让我确认了"）。
+- 合并习惯：ff-merge + 删特性分支（`feat/phase3-control-window` 已并入 `master` 并删除；在 `master` 上开发）。
+
+## 后续（roadmap）
+- **⏳ WebView2 去 Node**（详细 plan：`WEBVIEW2_PLAN.md`，自包含可随时开工）：系统 WebView2 跑官方 webmssdk 取 X-Bogus，替换 `DouyinSigner`(node) + `sign/`(jsdom)。新增 `WebView2Signer : IDouyinSigner`（Core 不动）。完成后去掉 `node.exe`(80MB)+jsdom(25MB)，分发降到 ~155MB、接近单 exe、抗算法变更。
+- **候选**：多房间。
+- **暂缓 / 做不了**：B站 实时统计推送（用户暂不要）、抖音累计点赞（平台不推）、真实在线人数（平台不提供，在线=人气值）。
+- **已完成**：绿色文件夹分发版（`pack.sh`，master `009f91f`）；抖音接入全量（弹幕/进场/关注/礼物/在线/看过/等级）；弹幕朗读（TTS via GPT-SoVITS + NAudio，独立第三管道）。
