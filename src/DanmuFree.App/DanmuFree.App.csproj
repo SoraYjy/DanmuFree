@@ -27,7 +27,7 @@
     <!-- 产物名 / 元数据（右键 exe → 属性 → 详细信息可见） -->
     <AssemblyName>DanmuFree</AssemblyName>
     <RootNamespace>DanmuFree.App</RootNamespace>
-    <Version>1.0.0</Version>
+    <Version>1.0.1</Version>
     <Company>Sora</Company>
     <Product>DanmuFree</Product>
     <Description>B站 / 抖音直播间弹幕桌面客户端</Description>
