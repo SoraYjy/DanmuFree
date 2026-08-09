@@ -89,7 +89,7 @@ GPT-SoVITS 是**独立的第三方项目**（音色克隆 TTS 服务），需自
 
 ## 致谢
 
-- 抖音签名 `sign/sign.js` 是 webmssdk 的反混淆产物，跟随 [saermart/DouyinLiveWebFetcher](https://github.com/saermart/DouyinLiveWebFetcher) 维护（GitHub 被墙走 gitee `iuact` 镜像）。
+- 抖音签名 `sign/sign.js` 是 webmssdk 的反混淆产物，跟随 [saermart/DouyinLiveWebFetcher](https://github.com/saermart/DouyinLiveWebFetcher) 维护。
 - 朗读：[GPT-SoVITS](https://github.com/RVC-Boss/GPT-SoVITS)、Windows SAPI / [System.Speech](https://learn.microsoft.com/dotnet/api/system.speech)；播放 [NAudio](https://github.com/naudio/NAudio)。
 - [CommunityToolkit.Mvvm](https://github.com/CommunityToolkit/dotnet)、[QRCoder](https://github.com/codebude/QRCoder)、Microsoft .NET / WPF。
 
