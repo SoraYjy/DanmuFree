@@ -12,10 +12,15 @@ namespace DanmuFree.App.Services;
 /// </summary>
 public sealed class DouyinSigner : IDouyinSigner
 {
-    private static readonly string SignDir = Path.Combine(AppContext.BaseDirectory, "sign");
+    // 单文件（self-contained single-file）publish 下，AppContext.BaseDirectory 是**解压临时目录**
+    // （%TEMP%\.net\DanmuFree\<hash>\），不是 exe 所在目录；node/ 和 sign/ 在 exe 旁。
+    // 故用 Environment.ProcessPath 定位真实 exe 目录（开发机 dotnet run 同样成立）。
+    private static readonly string AppDir =
+        Path.GetDirectoryName(Environment.ProcessPath ?? AppContext.BaseDirectory)!;
+    private static readonly string SignDir = Path.Combine(AppDir, "sign");
     private static readonly string RunnerPath = Path.Combine(SignDir, "sign_runner.js");
     // 分发自带的 node.exe（node/node.exe）；存在则优先用（用户机无需装 Node），否则回落 PATH 的 node（开发机）。
-    private static readonly string BundledNode = Path.Combine(AppContext.BaseDirectory, "node", "node.exe");
+    private static readonly string BundledNode = Path.Combine(AppDir, "node", "node.exe");
     private static string NodeExe => File.Exists(BundledNode) ? BundledNode : "node";
 
     /// <summary>启动期检测 node 是否可用（分发自带或 PATH）。无则抖音不可用，B站不受影响。</summary>
