@@ -94,4 +94,17 @@ public class RoomResolverTests
             () => resolver.ResolveAsync("123", CancellationToken.None));
         Assert.Contains("扫码登录", ex.Message);
     }
+
+    [Fact]
+    public async Task Resolve_reports_risk_control_on_code_352()
+    {
+        // B站对匿名连接返回 code:-352（风控，2026-08 实测）：必须能看懂、指向登录。
+        var handler = new FakeHttpHandler()
+            .When("getInfoByRoom", """{"code":-352,"message":"-352"}""");
+        var resolver = new RoomResolver(new HttpClient(handler), null);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => resolver.ResolveAsync("123", CancellationToken.None));
+        Assert.Contains("风控", ex.Message);
+    }
 }

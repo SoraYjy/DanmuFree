@@ -49,8 +49,10 @@ public sealed class RoomResolver
         var root = JsonDocument.Parse(await resp.Content.ReadAsStringAsync(ct)).RootElement;
         if (root.TryGetProperty("code", out var codeEl) && codeEl.TryGetInt32(out var code) && code != 0)
         {
+            if (code == -352)
+                throw new InvalidOperationException("房间解析失败：被B站风控（code -352）。匿名连接已不可用，必须扫码登录。");
             var msg = root.TryGetProperty("message", out var m) ? m.GetString() : $"code {code}";
-            throw new InvalidOperationException($"房间解析失败：{msg}");
+            throw new InvalidOperationException($"房间解析失败：{msg}（code {code}）");
         }
         if (root.TryGetProperty("data", out var data)
             && data.TryGetProperty("room_info", out var ri)
@@ -58,8 +60,8 @@ public sealed class RoomResolver
             && ridEl.TryGetInt32(out var real))
             return real;
 
-        // code=0 但缺 room_info.room_id：匿名风控 / 房间异常等。给人话提示，而不是裸 KeyNotFoundException。
-        throw new InvalidOperationException("房间解析失败：B站返回数据异常（匿名连接易被风控，建议扫码登录后重试）。");
+        // code=0 但缺 room_info.room_id：cookie 过期 / 被风控 / 房间异常等。给人话提示，而不是裸 KeyNotFoundException。
+        throw new InvalidOperationException("房间解析失败：B站返回数据异常。cookie 可能已过期或被风控，请重新扫码登录后重试。");
     }
 
     private async Task<(string token, string wss)> GetDanmu(int realId, CancellationToken ct)
@@ -69,7 +71,7 @@ public sealed class RoomResolver
         var root = JsonDocument.Parse(await resp.Content.ReadAsStringAsync(ct)).RootElement;
         if (!root.TryGetProperty("data", out var data)
             || !data.TryGetProperty("token", out var tokenEl) || tokenEl.ValueKind != JsonValueKind.String)
-            throw new InvalidOperationException("获取弹幕服务失败：B站返回数据异常（匿名连接易被风控，建议扫码登录后重试）。");
+            throw new InvalidOperationException("获取弹幕服务失败：B站返回数据异常。cookie 可能已过期或被风控，请重新扫码登录后重试。");
         if (!data.TryGetProperty("host_list", out var hosts) || hosts.GetArrayLength() == 0
             || !hosts[0].TryGetProperty("host", out var h) || h.ValueKind != JsonValueKind.String
             || !hosts[0].TryGetProperty("wss_port", out var portEl) || !portEl.TryGetInt32(out var port))
