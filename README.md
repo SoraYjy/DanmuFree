@@ -71,15 +71,19 @@ dotnet run --project src/DanmuFree.App                                   # debug
 
 **最快（零配置）**：朗读 TAB → 选 **「系统内置」** → 勾「启用」→「测试朗读」。用 Windows 自带中文语音（Huihui），免参考音频。
 
-**要更逼真音色（GPT-SoVITS）**：
-1. 本机启动 GPT-SoVITS API：
+**要更逼真音色（GPT-SoVITS）**
+
+GPT-SoVITS 是**独立的第三方项目**（音色克隆 TTS 服务），需自行下载部署，**不在 DanmuFree 仓库内**：
+
+1. 下载 GPT-SoVITS：<https://github.com/RVC-Boss/GPT-SoVITS>（按其 README 装好环境 / 模型）
+2. 在 **GPT-SoVITS 的项目目录里**启动它的推理 API —— `api_v2.py` 是 **GPT-SoVITS 自带**的、不是 DanmuFree 的文件：
    ```bash
    python api_v2.py -a 127.0.0.1 -p 9880 -c GPT_SoVITS/configs/tts_infer.yaml
    ```
-2. 朗读 TAB 选 **「GPT-SoVITS」**，填：服务地址（默认 9880）+ **3~10 秒参考音频** + 参考文本 + 参考语言
-3. 勾「启用」→「测试朗读」
+3. 回到 DanmuFree，朗读 TAB 选 **「GPT-SoVITS」**，填：服务地址（默认 9880）+ **3~10 秒参考音频** + 参考文本 + 参考语言
+4. 勾「启用」→「测试朗读」
 
-> 含英文弹幕报 `averaged_perceptron_tagger_eng`？在 GPT-SoVITS 的 venv：`python -c "import nltk; nltk.download('averaged_perceptron_tagger_eng'); nltk.download('punkt')"`
+> 含英文弹幕报 `averaged_perceptron_tagger_eng`？在 **GPT-SoVITS** 的 venv 跑：`python -c "import nltk; nltk.download('averaged_perceptron_tagger_eng'); nltk.download('punkt')"`
 
 **可选**：念用户名开关（开=「xx 说，…」，关=只读正文；礼物恒带用户名不受影响）· 语气滑块（采样温度，高丰富低平稳）· 礼物连送在 1200ms 内合并成「xx 送了 N 个 yy」。
 
