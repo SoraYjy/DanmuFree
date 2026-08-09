@@ -31,7 +31,7 @@ DanmuFree 是用户**从零自建**的 B站 / 抖音直播间弹幕桌面客户�
 
 ## Spec / 开发规范
 - **测试约束**：App 是 net8.0-windows（WPF），Tests 是 net8.0，**Tests 不能引用 App** → **Core 层 TDD**（FakeHttpHandler 模拟 HTTP / Set-Cookie；协议帧用真实抓包样本做回归），**App 层（窗口 / UI / VM）不单测**，以 `dotnet build` **0 错误 0 警告** + 用户冒烟为准。跑 `dotnet test`（Core 层共 108 单测）。
-- **B站协议变更排查**：HTTP 接口先 `curl` 验证字段路径再编码（历史验证点：`getInfoByRoom` 的 `data.room_info.room_id`、`getDanmuInfo`、`qrcode/generate`+`poll`、`finger/spi` 的 `b_3`、登录成功响应的 `Set-Cookie` 头）。
+- **B站协议变更排查**：HTTP 接口先 `curl` 验证字段路径再编码（历史验证点：`getInfoByRoom` 的 `data.room_info.room_id`、`getDanmuInfo`、`qrcode/generate`+`poll`、`finger/spi` 的 `b_3`、登录成功响应的 `Set-Cookie` 头）。**解析 B站响应一律 `TryGetProperty` + 人话错误，绝不裸 `GetProperty`**：`JsonElement.GetProperty` 缺字段抛 `KeyNotFoundException`（默认消息 "the given key was not present in the dictionary"，用户看不懂）。实测匿名风控时 `getInfoByRoom`/`getDanmuInfo` 返回 `code:0` 但 `data` 缺 `room_info.room_id`/`token` → 旧 `RoomResolver` 直接抛 → 控制面板显示「连接失败：the given key was not present in the dictionary」（v1.0.1 修，见 `RoomResolverTests`）。
 - **WPF 要点**：
   - 无边框透明窗（`WindowStyle=None` + `AllowsTransparency=True`）；拖动用 `PreviewMouseLeftButtonDown`（隧道，先于子元素）+ `DragMove` + `try/catch InvalidOperationException`，处理器里排除按钮（`ButtonBase`）。
   - **值优先级**：本地绑定 > Style.Triggers；需要 trigger 覆盖绑定时，把目标属性移入 Style 或用 MultiDataTrigger。

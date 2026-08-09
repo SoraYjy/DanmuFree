@@ -68,4 +68,30 @@ public class RoomResolverTests
         await Assert.ThrowsAsync<InvalidOperationException>(
             () => resolver.ResolveAsync("0", CancellationToken.None));
     }
+
+    [Fact]
+    public async Task Resolve_reports_friendly_error_when_room_info_missing()
+    {
+        // 匿名风控等场景：code=0 但 data 缺 room_info —— 不能抛裸 KeyNotFoundException（用户看不懂）
+        var handler = new FakeHttpHandler()
+            .When("getInfoByRoom", """{"code":0,"data":{}}""");
+        var resolver = new RoomResolver(new HttpClient(handler), null);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => resolver.ResolveAsync("123", CancellationToken.None));
+        Assert.Contains("扫码登录", ex.Message);
+    }
+
+    [Fact]
+    public async Task Resolve_reports_friendly_error_when_danmu_token_missing()
+    {
+        var handler = new FakeHttpHandler()
+            .When("getInfoByRoom", RoomInfoJson)
+            .When("getDanmuInfo", """{"code":0,"data":{}}""");
+        var resolver = new RoomResolver(new HttpClient(handler), null);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => resolver.ResolveAsync("123", CancellationToken.None));
+        Assert.Contains("扫码登录", ex.Message);
+    }
 }
