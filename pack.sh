@@ -34,11 +34,16 @@ rm -rf "$OUT"
 dotnet publish src/DanmuFree.App -c Release -r win-x64 --self-contained \
   -p:PublishSingleFile=true -o "$OUT"
 
-echo "[2/3] 复制 node.exe + 验证签名..."
+echo "[2/3] 复制 node.exe + 完整 sign/ + 验证签名..."
 mkdir -p "$OUT/node"
 cp "$NODE_SRC" "$OUT/node/node.exe"
+# dotnet publish 的 Content glob（sign\**）偶尔漏拷 node_modules 个别文件（实测漏
+# jsdom/.../CSSStyleProperties.js、mdn-data/css/properties.json），导致 jsdom 加载失败、
+# 抖音签名不可用。这里用源目录完整覆盖 sign/，再跑签名自检兜底。
+rm -rf "$OUT/sign"
+cp -r "src/DanmuFree.App/sign" "$OUT/"
 SIG=$("$OUT/node/node.exe" "$OUT/sign/sign_runner.js" d41d8cd98f00b204e9800998ecf8427e 2>/dev/null)
-[ -n "$SIG" ] && echo "  签名自检 OK（X-Bogus=$SIG）" || { echo "  签名自检失败"; exit 1; }
+[ -n "$SIG" ] && echo "  签名自检 OK（X-Bogus=$SIG）" || { echo "  签名自检失败（sign/ 或 node 有误）"; exit 1; }
 
 echo "[3/3] 完成。"
 echo "产出：$OUT  （$(du -sh "$OUT" | cut -f1)）"
