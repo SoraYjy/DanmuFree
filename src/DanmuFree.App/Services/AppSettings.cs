@@ -67,9 +67,10 @@ public sealed class AppSettings
 
     // 弹幕朗读（TTS；朗读开关独立于显示开关）。
     public bool TtsEnabled { get; set; } = false;
-    // 引擎："GptSoVits"（音色克隆，需参考音频 + 本地服务）/ "System"（Windows SAPI 内置，免参考音频）。
-    public string TtsEngine { get; set; } = "GptSoVits";
+    // 引擎："Edge"（在线 Azure 神经音，免部署·默认） / "GptSoVits"（音色克隆，需参考音频 + 本地服务）/ "System"（Windows SAPI 内置，免参考音频）。
+    public string TtsEngine { get; set; } = "Edge";
     public string? TtsSystemVoice { get; set; } = "";   // 系统引擎选用的音色名（空=系统默认）
+    public string TtsEdgeVoice { get; set; } = "zh-CN-XiaoxiaoNeural";   // Edge 在线引擎音色
     public string TtsServerUrl { get; set; } = "http://127.0.0.1:9880";
     public bool TtsReadDanmu { get; set; } = true;
     public bool TtsReadSuperChat { get; set; } = true;

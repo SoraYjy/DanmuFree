@@ -174,7 +174,7 @@
             </StackPanel>
           </TabItem>
 
-          <!-- 弹幕朗读（双引擎：GPT-SoVITS 音色克隆 / 系统内置 SAPI；朗读独立于显示） -->
+          <!-- 弹幕朗读（三引擎：Edge 在线 Azure 神经音 / GPT-SoVITS 音色克隆 / 系统内置 SAPI；朗读独立于显示） -->
           <TabItem Header="朗读">
             <TabItem.Resources>
               <Style TargetType="TextBlock">
@@ -185,24 +185,38 @@
               <StackPanel Margin="6">
                 <CheckBox Content="启用弹幕朗读" IsChecked="{Binding TtsEnabled}" Foreground="#FFCCCCCC" Margin="0,2"
                           ToolTip="开启后，聊天/SC/礼物按所选引擎合成播放。朗读独立于显示"/>
-                <!-- 引擎选择 -->
+                <!-- 引擎选择（三档：Edge 在线默认 / GPT-SoVITS 克隆 / 系统内置 SAPI） -->
                 <StackPanel Orientation="Horizontal" Margin="0,4">
                   <TextBlock Text="语音引擎" VerticalAlignment="Center" Width="72"/>
+                  <RadioButton Content="Edge 在线（推荐·零配置）" GroupName="TtsEngine" Foreground="#FFCCCCCC" VerticalAlignment="Center"
+                               IsChecked="{Binding TtsEngine, Converter={StaticResource StringEquals}, ConverterParameter=Edge}"
+                               ToolTip="Azure 神经音色（晓晓/云希等），免部署、免 key、免参考音频。需联网（直播本就联网）。音质远胜系统内置"/>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,2">
+                  <TextBlock Text="" Width="72"/>
                   <RadioButton Content="GPT-SoVITS（克隆音色）" GroupName="TtsEngine" Foreground="#FFCCCCCC" VerticalAlignment="Center"
                                IsChecked="{Binding TtsEngine, Converter={StaticResource StringEquals}, ConverterParameter=GptSoVits}"
-                               ToolTip="音色克隆，需本地 GPT-SoVITS 服务 + 3~10 秒参考音频，音质最像"/>
+                               ToolTip="音色克隆，需本地 GPT-SoVITS 服务 + 3~10 秒参考音频，音质最像、可克隆主播声音"/>
                 </StackPanel>
                 <StackPanel Orientation="Horizontal" Margin="0,2">
                   <TextBlock Text="" Width="72"/>
                   <RadioButton Content="系统内置（免参考音频）" GroupName="TtsEngine" Foreground="#FFCCCCCC" VerticalAlignment="Center"
                                IsChecked="{Binding TtsEngine, Converter={StaticResource StringEquals}, ConverterParameter=System}"
-                               ToolTip="零配置：用 Windows 自带语音（如 Microsoft Huihui 中文）。免参考音频，随开随用；音色取决于系统已装语音包"/>
+                               ToolTip="零配置：用 Windows 自带语音（如 Microsoft Huihui 中文）。免参考音频、离线可用；音色取决于系统已装语音包，偏机械"/>
                 </StackPanel>
                 <CheckBox Content="读 弹幕" IsChecked="{Binding TtsReadDanmu}" Foreground="#FFCCCCCC" Margin="0,2"/>
                 <CheckBox Content="读 SC（醒目留言）" IsChecked="{Binding TtsReadSuperChat}" Foreground="#FFCCCCCC" Margin="0,2"/>
                 <CheckBox Content="读 礼物" IsChecked="{Binding TtsReadGift}" Foreground="#FFCCCCCC" Margin="0,2"/>
                 <CheckBox Content="读 用户名（xx 说：…）" IsChecked="{Binding TtsReadUserName}" Foreground="#FFCCCCCC" Margin="0,2"
                           ToolTip="关掉则只读正文，不念用户名"/>
+                <!-- Edge 在线 专属 -->
+                <StackPanel Visibility="{Binding TtsEngine, Converter={StaticResource StringEquals}, ConverterParameter=Edge}">
+                  <StackPanel Orientation="Horizontal" Margin="0,4">
+                    <TextBlock Text="音色" VerticalAlignment="Center" Width="72"/>
+                    <ComboBox ItemsSource="{Binding EdgeVoices}" SelectedItem="{Binding TtsEdgeVoice}" Width="220"
+                              ToolTip="Azure 神经音色。晓晓(Xiao)/晓伊(Xiaoyi)=女声；云希(Yunxi)/云健(Yunjian)/云扬(Yunyang)=男声；后两个为方言"/>
+                  </StackPanel>
+                </StackPanel>
                 <!-- GPT-SoVITS 专属 -->
                 <StackPanel Visibility="{Binding TtsEngine, Converter={StaticResource StringEquals}, ConverterParameter=GptSoVits}">
                   <StackPanel Orientation="Horizontal" Margin="0,4">
@@ -257,7 +271,7 @@
                            ToolTip="逗号分隔，命中任一则不读"/>
                 </StackPanel>
                 <Button Content="测试朗读" Command="{Binding TestTtsCommand}" Margin="0,6,0,4" HorizontalAlignment="Left"/>
-                <TextBlock Text="GPT-SoVITS：需本地启动 api（默认 127.0.0.1:9880）+ 3~10 秒参考音频，音质最像。系统内置：零配置、免参考音频，用 Windows 语音（如 Huihui）。切换引擎/音色立即生效；朗读与显示各自独立" Foreground="#FF888888" FontSize="11" Margin="0,2,0,6" TextWrapping="Wrap"/>
+                <TextBlock Text="Edge 在线：Azure 神经音色，免部署免 key（需联网；非官方端点，偶发失效时切系统内置兜底）。GPT-SoVITS：需本地启动 api（默认 127.0.0.1:9880）+ 3~10 秒参考音频，可克隆音色。系统内置：零配置离线，音色偏机械。切换引擎/音色立即生效；朗读与显示各自独立" Foreground="#FF888888" FontSize="11" Margin="0,2,0,6" TextWrapping="Wrap"/>
               </StackPanel>
             </ScrollViewer>
           </TabItem>

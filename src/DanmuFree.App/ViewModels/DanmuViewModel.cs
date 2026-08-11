@@ -94,8 +94,9 @@ public partial class DanmuViewModel : ViewModelBase
 
     // 弹幕朗读（独立于显示开关；GPT-SoVITS 本地服务）
     [ObservableProperty] private bool _ttsEnabled;
-    [ObservableProperty] private string _ttsEngine = "GptSoVits";        // "GptSoVits"(音色克隆) / "System"(内置 SAPI)
+    [ObservableProperty] private string _ttsEngine = "Edge";             // "Edge"(在线 Azure 神经音，免部署·默认) / "GptSoVits"(音色克隆) / "System"(内置 SAPI)
     [ObservableProperty] private string? _ttsSystemVoice = "";           // 系统引擎音色名（空=系统默认）
+    [ObservableProperty] private string _ttsEdgeVoice = "zh-CN-XiaoxiaoNeural"; // Edge 引擎音色
     [ObservableProperty] private string _ttsServerUrl = "http://127.0.0.1:9880";
     [ObservableProperty] private bool _ttsReadDanmu = true;
     [ObservableProperty] private bool _ttsReadSuperChat = true;
@@ -112,6 +113,8 @@ public partial class DanmuViewModel : ViewModelBase
 
     // 系统内置引擎可选音色（SAPI 枚举，启动时填充；空=系统无可用音色，回落默认）。
     public ObservableCollection<string> SystemVoices { get; } = new();
+    // Edge 在线引擎可选音色（Azure 神经音，静态清单见 Core.EdgeTtsClient.SupportedVoices）。
+    public ObservableCollection<string> EdgeVoices { get; } = new(EdgeTtsClient.SupportedVoices);
 
     // 两窗几何（位置 + 大小）：窗口启动时读一次、关闭时写回。非绑定属性，无需通知。
     public double? MainLeft { get; set; }
@@ -163,8 +166,9 @@ public partial class DanmuViewModel : ViewModelBase
         NotifyLeft = s.NotifyLeft; NotifyTop = s.NotifyTop; NotifyWidth = s.NotifyWidth; NotifyHeight = s.NotifyHeight;
         ControlLeft = s.ControlLeft; ControlTop = s.ControlTop; ControlWidth = s.ControlWidth; ControlHeight = s.ControlHeight;
         // 朗读
-        TtsEngine = string.IsNullOrEmpty(s.TtsEngine) ? "GptSoVits" : s.TtsEngine;
+        TtsEngine = string.IsNullOrEmpty(s.TtsEngine) ? "Edge" : s.TtsEngine;
         TtsSystemVoice = s.TtsSystemVoice ?? "";
+        TtsEdgeVoice = string.IsNullOrEmpty(s.TtsEdgeVoice) ? "zh-CN-XiaoxiaoNeural" : s.TtsEdgeVoice;
         TtsServerUrl = string.IsNullOrEmpty(s.TtsServerUrl) ? "http://127.0.0.1:9880" : s.TtsServerUrl;
         TtsReadDanmu = s.TtsReadDanmu;
         TtsReadSuperChat = s.TtsReadSuperChat;
@@ -389,6 +393,7 @@ public partial class DanmuViewModel : ViewModelBase
             TtsEnabled = TtsEnabled,
             TtsEngine = TtsEngine,
             TtsSystemVoice = TtsSystemVoice,
+            TtsEdgeVoice = TtsEdgeVoice,
             TtsServerUrl = TtsServerUrl,
             TtsReadDanmu = TtsReadDanmu,
             TtsReadSuperChat = TtsReadSuperChat,
@@ -421,6 +426,7 @@ public partial class DanmuViewModel : ViewModelBase
     // 引擎 / 音色 / 服务地址 变更：若朗读中则重建底层 client（换合成器），否则下次启用生效。
     partial void OnTtsEngineChanged(string value) => RestartTtsIfRunning();
     partial void OnTtsSystemVoiceChanged(string? value) => RestartTtsIfRunning();
+    partial void OnTtsEdgeVoiceChanged(string value) => RestartTtsIfRunning();
     partial void OnTtsServerUrlChanged(string value) => RestartTtsIfRunning();
 
     private TtsOptions BuildTtsOptions() => new(
@@ -432,9 +438,12 @@ public partial class DanmuViewModel : ViewModelBase
         MediaType: "wav",
         Temperature: TtsTemperature);
 
-    private ITtsClient CreateTtsClient() => TtsEngine == "System"
-        ? new SystemSpeechTtsClient(TtsSystemVoice)
-        : new GptSoVitsClient(new HttpClient(), TtsServerUrl);
+    private ITtsClient CreateTtsClient() => TtsEngine switch
+    {
+        "System" => new SystemSpeechTtsClient(TtsSystemVoice),
+        "Edge" => new EdgeTtsClient(TtsEdgeVoice),
+        _ => new GptSoVitsClient(new HttpClient(), TtsServerUrl),
+    };
 
     private void EnsureTtsSpeaker()
     {
