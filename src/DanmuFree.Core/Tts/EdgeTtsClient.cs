@@ -42,27 +42,28 @@ public sealed class EdgeTtsClient : ITtsClient
     public const string DefaultVoice = "zh-CN-XiaoxiaoNeural";
 
     /// <summary>UI 下拉用的中文音色清单——Edge 端点全部 zh 音色（2026-08 探针实测可用，共 14 个：
-    /// 普通话主线 + 方言 + 粤语 + 台湾）。来源：voices/list 接口。加新音色只需往这里加一行。</summary>
-    public static readonly string[] SupportedVoices =
+    /// 普通话主线 + 方言 + 粤语 + 台湾）。来源：voices/list 接口（仅返罗马音，中文名按微软官方 persona 补）。
+    /// 加新音色只需往这里加一行（Display 用「名字（性别·语言）」格式）。</summary>
+    public static readonly EdgeVoice[] SupportedVoices =
     {
         // ── 普通话（zh-CN 主线）──
-        "zh-CN-XiaoxiaoNeural",   // 晓晓 女（默认·万金油）
-        "zh-CN-XiaoyiNeural",     // 晓伊 女
-        "zh-CN-YunxiNeural",      // 云希 男
-        "zh-CN-YunjianNeural",    // 云健 男
-        "zh-CN-YunyangNeural",    // 云扬 男
-        "zh-CN-YunxiaNeural",     // 云夏 男（童声感）
+        new("zh-CN-XiaoxiaoNeural", "晓晓（女·普通话）"),         // 默认·万金油
+        new("zh-CN-XiaoyiNeural",   "晓伊（女·普通话）"),
+        new("zh-CN-YunxiNeural",    "云希（男·普通话）"),
+        new("zh-CN-YunjianNeural",  "云健（男·普通话）"),
+        new("zh-CN-YunyangNeural",  "云扬（男·普通话）"),
+        new("zh-CN-YunxiaNeural",   "云夏（男·童声）"),
         // ── 方言（zh-CN 区域变体）──
-        "zh-CN-liaoning-XiaobeiNeural", // 小贝 女·东北话
-        "zh-CN-shaanxi-XiaoniNeural",   // 小妮 女·陕西话
-        // ── 粤语（zh-HK）──
-        "zh-HK-HiuGaaiNeural",    // 曉佳 女·粤语
-        "zh-HK-HiuMaanNeural",    // 曼蔓 女·粤语
-        "zh-HK-WanLungNeural",    // 兆龍 男·粤语
-        // ── 台湾（zh-TW）──
-        "zh-TW-HsiaoChenNeural",  // 曉臻 女·台湾
-        "zh-TW-HsiaoYuNeural",    // 曉雨 女·台湾
-        "zh-TW-YunJheNeural",     // 雲哲 男·台湾
+        new("zh-CN-liaoning-XiaobeiNeural", "小贝（女·东北话）"),
+        new("zh-CN-shaanxi-XiaoniNeural",   "小妮（女·陕西话）"),
+        // ── 粤语（zh-HK，名字按官方繁体）──
+        new("zh-HK-HiuGaaiNeural", "曉佳（女·粤语）"),
+        new("zh-HK-HiuMaanNeural", "曉曼（女·粤语）"),
+        new("zh-HK-WanLungNeural", "雲龍（男·粤语）"),
+        // ── 台湾（zh-TW，名字按官方繁体）──
+        new("zh-TW-HsiaoChenNeural", "曉臻（女·台湾）"),
+        new("zh-TW-HsiaoYuNeural",   "曉雨（女·台湾）"),
+        new("zh-TW-YunJheNeural",    "雲哲（男·台湾）"),
     };
 
     private readonly string _voice;
@@ -234,3 +235,6 @@ public sealed class EdgeTtsClient : ITtsClient
         s.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;")
          .Replace("'", "&apos;").Replace("\"", "&quot;");
 }
+
+/// <summary>一个音色选项：Id（发服务端的 voice name）+ Display（UI 下拉显示的中文名）。</summary>
+public sealed record EdgeVoice(string Id, string Display);

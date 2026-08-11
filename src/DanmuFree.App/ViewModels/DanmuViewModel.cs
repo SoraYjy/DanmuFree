@@ -114,7 +114,7 @@ public partial class DanmuViewModel : ViewModelBase
     // 系统内置引擎可选音色（SAPI 枚举，启动时填充；空=系统无可用音色，回落默认）。
     public ObservableCollection<string> SystemVoices { get; } = new();
     // Edge 在线引擎可选音色（Azure 神经音，静态清单见 Core.EdgeTtsClient.SupportedVoices）。
-    public ObservableCollection<string> EdgeVoices { get; } = new(EdgeTtsClient.SupportedVoices);
+    public ObservableCollection<EdgeVoice> EdgeVoices { get; } = new(EdgeTtsClient.SupportedVoices);
 
     // 两窗几何（位置 + 大小）：窗口启动时读一次、关闭时写回。非绑定属性，无需通知。
     public double? MainLeft { get; set; }
