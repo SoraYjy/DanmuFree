@@ -77,21 +77,4 @@ public class EdgeTtsClientTests
     [InlineData(1.5, "+50%")]
     public void SpeedToRate_maps_to_signed_percent(double speed, string expected)
         => Assert.Equal(expected, EdgeTtsClient.SpeedToRate(speed));
-
-    // ── WAV 头 ──
-
-    [Fact]
-    public void BuildWav_prepends_44byte_pcm_header()
-    {
-        var pcm = new byte[] { 1, 2, 3, 4 };
-        var wav = EdgeTtsClient.BuildWav(pcm, sampleRate: 24000, bits: 16, channels: 1);
-        // 44 字节头 + 数据；RIFF/WAVE/fmt /data 标记；PCM 格式=1；单声道；24kHz
-        Assert.Equal(44 + pcm.Length, wav.Length);
-        Assert.Equal("RIFF", System.Text.Encoding.ASCII.GetString(wav, 0, 4));
-        Assert.Equal("WAVE", System.Text.Encoding.ASCII.GetString(wav, 8, 4));
-        Assert.Equal(1, BitConverter.ToInt16(wav, 20));      // PCM
-        Assert.Equal(1, BitConverter.ToInt16(wav, 22));      // mono
-        Assert.Equal(24000, BitConverter.ToInt32(wav, 24));  // sample rate
-        Assert.Equal(16, BitConverter.ToInt16(wav, 34));     // bits
-    }
 }

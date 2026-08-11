@@ -8,14 +8,16 @@ namespace DanmuFree.Core.Tts;
 /// <summary>
 /// Edge「大声朗读」在线 TTS 客户端：调 Edge 浏览器 Read Aloud 用的 Azure 神经音色，
 /// 免 key、免注册、免部署（朋友「不会装 GPT-SoVITS」的对症解法）。实现 Core 的
-/// <see cref="ITtsClient"/>，返回 WAV 流复用 TtsSpeaker 的 NAudio 串行播放。
+/// <see cref="ITtsClient"/>，返回 **MP3 流**（服务端只吐 MP3，不吐 PCM——见下），由
+/// TtsSpeaker 嗅探后用 NAudio 解码播放（Core 无第三方解码器，解码放 App 层）。
 ///
 /// 协议（reverse-engineered，官方无文档；跟踪 rany2/edge-tts）：
 /// ① WSS <c>wss://speech.platform.bing.com/.../readaloud/edge/v1?TrustedClientToken=...&amp;Sec-MS-GEC=&lt;token&gt;&amp;ConnectionId=&lt;guid&gt;</c>
 /// ② 每次合成 = 新建一条 WS：发 speech.config（指定输出格式）+ ssml（含音色/语速/文本）两个文本帧，
-///    收二进制帧（前 2 字节大端=头长度，其后是头，再后是音频数据）攒 PCM，收到文本帧 Path:turn.end 结束。
+///    收二进制帧（前 2 字节大端=头长度，其后是头，再后是音频数据）攒 MP3，收到文本帧 Path:turn.end 结束。
 /// ③ DRM token <see cref="BuildSecMsGec"/>：服务端 2025 年起强制校验，缺失/错误 → 403。
-/// 输出格式用 raw-24khz-16bit-mono-pcm（纯 PCM，无 RIFF 头），最后由 <see cref="BuildWav"/> 套 44 字节头。
+/// 输出格式 audio-24khz-48kbitrate-mono-mp3（**实测服务返回 MP3**——raw-/riff-/audio-...pcm 等 PCM 串
+///   全被拒 "Unsupported output format"，只有 MP3/Opus 串被接受；返回的就是 MP3，不是 PCM WAV）。
 ///
 /// 注意：非官方端点、ToS 灰色（MS 可再改 token 算法 / 版本号，2025 年断过、上游几天内修好）；
 /// 失败经 TtsSpeaker catch → FileLogger 落盘。无网络时弹幕本就收不到，故「需联网」不是负担。
@@ -28,8 +30,8 @@ public sealed class EdgeTtsClient : ITtsClient
     // Chromium 版本号常量（token 校验用，跟随官方变化时改这一处即可；2026-08 取自 rany2/edge-tts）。
     private const string SecMsGecVersion = "1-143.0.3650.75";
     // 探针实测（2026-08）：免费 Edge 端点主动拒绝 raw-/riff-/audio-...pcm 等 PCM 格式串（"Unsupported
-    // output format"），只接受 MP3/Opus 串。但请求 audio-...mp3 时服务实际返回 **24kHz/16bit/mono
-    // PCM WAV（RIFF）**——直接喂 WaveFileReader 即可，无需解码。若服务行为变了，IsRiff 失效时会回落到 BuildWav。
+    // output format"），只接受 MP3/Opus 串；请求 audio-...mp3 服务返回的就是 **MP3**（不是 PCM——
+    // 早期误判为 PCM 是 BuildWav 套头造成的假象）。原样返回 MP3，由 TtsSpeaker 用 NAudio 解码。
     private const string OutputFormat = "audio-24khz-48kbitrate-mono-mp3";
     private const string EdgeUserAgent =
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) " +
@@ -134,10 +136,8 @@ public sealed class EdgeTtsClient : ITtsClient
             if (audio.Length == 0)
                 throw new HttpRequestException("Edge TTS 未返回音频（音色名错误或 token 被服务拒绝，详见日志）。");
 
-            // 实测服务返回 RIFF/WAV（以 RIFF 开头）→ 原样返回；若将来变成纯 PCM，回落 BuildWav 套头。
-            var pcm = audio.ToArray();
-            var wav = IsRiff(pcm) ? pcm : BuildWav(pcm, sampleRate: 24000, bits: 16, channels: 1);
-            return new MemoryStream(wav, writable: false);
+            // 服务返回 MP3（见 OutputFormat 注释）；原样返回，由 TtsSpeaker 嗅探后用 NAudio 解码。
+            return new MemoryStream(audio.ToArray(), writable: false);
         }
         catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested && !ct.IsCancellationRequested)
         {
@@ -222,31 +222,4 @@ public sealed class EdgeTtsClient : ITtsClient
     private static string EscapeXml(string s) =>
         s.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;")
          .Replace("'", "&apos;").Replace("\"", "&quot;");
-
-    private static bool IsRiff(byte[] b) => b.Length >= 4 &&
-        b[0] == (byte)'R' && b[1] == (byte)'I' && b[2] == (byte)'F' && b[3] == (byte)'F';
-
-    /// <summary>给纯 PCM 套 44 字节标准 WAV 头（PCM/16bit/mono/24kHz）。</summary>
-    public static byte[] BuildWav(byte[] pcm, int sampleRate = 24000, int bits = 16, int channels = 1)
-    {
-        int blockAlign = channels * bits / 8;
-        int byteRate = sampleRate * blockAlign;
-        var wav = new byte[44 + pcm.Length];
-        using var w = new BinaryWriter(new MemoryStream(wav));
-        w.Write(Encoding.ASCII.GetBytes("RIFF"));
-        w.Write(36 + pcm.Length);
-        w.Write(Encoding.ASCII.GetBytes("WAVE"));
-        w.Write(Encoding.ASCII.GetBytes("fmt "));
-        w.Write(16);                 // fmt 块大小（PCM 固定 16）
-        w.Write((short)1);           // 音频格式 = PCM
-        w.Write((short)channels);
-        w.Write(sampleRate);
-        w.Write(byteRate);
-        w.Write((short)blockAlign);
-        w.Write((short)bits);
-        w.Write(Encoding.ASCII.GetBytes("data"));
-        w.Write(pcm.Length);
-        w.Write(pcm);
-        return wav;
-    }
 }

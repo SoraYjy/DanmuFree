@@ -1,3 +1,4 @@
+using System.IO;
 using System.Threading.Channels;
 using DanmuFree.Core.Tts;
 using NAudio.Wave;
@@ -5,7 +6,8 @@ using NAudio.Wave;
 namespace DanmuFree.App.Services;
 
 /// <summary>
-/// 朗读消费泵：从 bounded Channel 取文本 → GPT-SoVITS 合成 → NAudio 串行播放。
+/// 朗读消费泵：从 bounded Channel 取文本 → ITtsClient 合成 → NAudio 串行播放。
+/// 合成返回 WAV（GPT-SoVITS / SystemSpeech）直读 WaveFileReader；返回 MP3（Edge 在线）用 Mp3FileReader 解码。
 /// 串行不打断（播完一条再下一条）；Channel DropOldest 在洪水时丢最旧、紧跟最新。
 /// 单条合成/播放失败：catch 跳过，继续队列，绝不抛回收弹幕主路径。
 /// </summary>
@@ -58,14 +60,16 @@ public sealed class TtsSpeaker : IDisposable
             {
                 if (!_channel.Reader.TryRead(out var text)) continue;
                 WaveOutEvent? wo = null;
-                WaveFileReader? reader = null;
+                WaveStream? reader = null;
                 try
                 {
                     using var stream = await _client.SynthesizeAsync(text, _opts, ct);
                     var tcs = new TaskCompletionSource();
                     wo = new WaveOutEvent { Volume = _volume };
                     _current = wo;
-                    reader = new WaveFileReader(stream);
+                    // 嗅探格式：RIFF → WAV（GPT-SoVITS / SystemSpeech）；否则 MP3（Edge 在线引擎）。
+                    // Core 的 EdgeTtsClient 只返 MP3（服务不吐 PCM），解码用 NAudio 放 App 层。
+                    reader = IsWavStream(stream) ? new WaveFileReader(stream) : new Mp3FileReader(stream);
                     wo.PlaybackStopped += (_, _) => tcs.TrySetResult();
                     wo.Init(reader);
                     wo.Play();
@@ -96,5 +100,20 @@ public sealed class TtsSpeaker : IDisposable
         catch { } // 防止聚合异常卡死 Dispose
         _cts?.Dispose();
         _cts = null;
+    }
+
+    /// <summary>嗅探音频流头部：RIFF → WAV（WaveFileReader），否则按 MP3（Mp3FileReader）解码。
+    /// 读后还原 Position，reader 仍从头读。流需可 seek（各 client 均返回 MemoryStream）。</summary>
+    private static bool IsWavStream(Stream s)
+    {
+        if (!s.CanSeek) return false;
+        long pos = s.Position;
+        try
+        {
+            Span<byte> h = stackalloc byte[4];
+            int n = s.Read(h);
+            return n >= 4 && h[0] == (byte)'R' && h[1] == (byte)'I' && h[2] == (byte)'F' && h[3] == (byte)'F';
+        }
+        finally { s.Position = pos; }
     }
 }
