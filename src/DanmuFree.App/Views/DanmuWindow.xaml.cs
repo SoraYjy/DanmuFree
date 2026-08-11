@@ -26,6 +26,9 @@ public partial class DanmuWindow : Window
         _notify = new NotifyWindow(_vm);
         Loaded += OnLoaded;
         Closing += OnMainClosing;
+        // 悬浮态抗 Win+D / 显示桌面：Win+D 会把所有顶层窗口最小化（含置顶），悬浮窗被最小化时立刻恢复，
+        // 使其始终可见。仅悬浮态生效——非悬浮保持标准行为。Topmost 由 XAML 绑 EffectiveTopmost，恢复后自动复用。
+        StateChanged += (_, _) => { if (_vm.IsFloating && WindowState == WindowState.Minimized) WindowState = WindowState.Normal; };
     }
 
     private void ApplySavedGeometry(DanmuViewModel vm)

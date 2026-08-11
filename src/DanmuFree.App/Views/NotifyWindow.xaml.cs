@@ -24,6 +24,8 @@ public partial class NotifyWindow : Window
         // 仅 app 退出时真正关闭；否则 Alt+F4 一律隐藏（由 ShowNotifyWindow 控制），
         // 避免 Owner-less 窗口被销毁后无法再 Show。
         Closing += OnClosing;
+        // 悬浮态抗 Win+D / 显示桌面：被最小化时立刻恢复（仅悬浮态生效）。详见 DanmuWindow 同款注释。
+        StateChanged += (_, _) => { if (_vm.IsNotifyFloating && WindowState == WindowState.Minimized) WindowState = WindowState.Normal; };
     }
 
     private void OnLoaded(object sender, RoutedEventArgs e)
