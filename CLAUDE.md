@@ -12,12 +12,13 @@ DanmuFree 是用户**从零自建**的 B站 / 抖音直播间弹幕桌面客户�
   - `Protocol/`（抖音新增）：**DouyinProto**（手写 protobuf varint：PushFrame/Response/Message/Chat/Gift/RoomUserSeq 解码 + BuildAck/BuildHeartbeat）、**DouyinSign**（纯 C# 算签名素材：13 字段 param→md5=X-MS-STUB + BuildConnectUrl[域名 `-ws-web-`] + `IDouyinSigner` 抽象）、**DouyinMapper**（method→RichMessage）、**DouyinRoomResolver**（主页抠 ttwid + enter 接口取真实 room_id，**不需 a_bogus**）。
   - `Login/`：LoginService（扫码登录，**优先从 `Set-Cookie` 响应头提取 cookie**，`data.url` query 作兜底）、QrStatus、QrInfo。
   - `Models/`：RichMessage（record）、MessageType。
+  - `Tts/`：**ITtsClient**（`SynthesizeAsync→Stream`，**契约放宽为 WAV 或 MP3**）、**EdgeTtsClient**（**Core、`System.Net.WebSockets`、零第三方**；clean-room 实现 Edge Read Aloud 协议，返 MP3；`BuildSecMsGec`/`BuildSsml`/`SpeedToRate` 纯逻辑可单测；`SupportedVoices` 14 个中文音色 `EdgeVoice(Id,Display)`）、**GptSoVitsClient**（HTTP GET+query→wav）、**TtsOptions/TtsReadFlags**、**TtsTextBuilder**（按 flags 转朗读文本）、**GiftReadAggregator**（礼物连送聚合，纯逻辑）。
 - `src/DanmuFree.App/`（net8.0-windows，WPF）
   - `Views/`：DanmuWindow（弹幕显示，纯展示窗）、NotifyWindow（进场/关注独立窗，纯展示窗）、ControlWindow（**常驻**控制/设置，任务栏可最小化，标题栏拖动）、LoginDialog（扫码）。
   - `ViewModels/`：DanmuViewModel（MVVM，CommunityToolkit.Mvvm；含 EffectiveTopmost/EffectiveOpacity / EffectiveNotifyTopmost/EffectiveNotifyOpacity 等「进悬浮自动生效、退出还原」的派生属性；两个集合 Messages/NotifyMessages + 两个 pump）。
-  - `Services/`：AppSettings、SettingsService（%AppData%/DanmuFree/settings.json）、FileLogger、UiBatchPump（Channel→100ms 批量刷 UI）、QrImageRenderer、**WindowClickThrough**（Win32 `WS_EX_TRANSPARENT` 鼠标穿透）、**DouyinSigner**（实现 `IDouyinSigner`：md5→node 子进程跑 `sign/sign_runner.js`→X-Bogus）。
+  - `Services/`：AppSettings、SettingsService（%AppData%/DanmuFree/settings.json）、FileLogger、UiBatchPump（Channel→100ms 批量刷 UI）、QrImageRenderer、**WindowClickThrough**（Win32 `WS_EX_TRANSPARENT` 鼠标穿透）、**DouyinSigner**（实现 `IDouyinSigner`：md5→node 子进程跑 `sign/sign_runner.js`→X-Bogus）、**TtsSpeaker**（NAudio 串行播放；嗅探音频头 RIFF→`WaveFileReader`，否则→`Mp3FileReader` 解码 MP3）、**SystemSpeechTtsClient**（App 层 SAPI 内置引擎，`ListVoiceNames()` 枚举系统音色）、**GiftTtsPump**（礼物朗读 debounce）。
   - `sign/`：抖音签名 sidecar —— `sign.js`（webmssdk 1.0.0.53 + jsdom 补环境，saermart 逆向）+ `sign_runner.js` + `package.json` + `node_modules/jsdom`（csproj `Content Include sign\**` 随 exe 分发；node_modules 本地存在即复制、gitignore 不入库）。
-  - `Converters/`：MessageTypeToBrush、OpacityToBackground、TimeIfShown。
+  - `Converters/`：MessageTypeToBrush、OpacityToBackground、TimeIfShown、**StringEqualsConverter**（朗读 TAB 按 TtsEngine 切引擎控件可见 / RadioButton 双向）。
 - `tests/DanmuFree.Tests/`（net8.0）：Core 层单测 + `Helpers/FakeHttpHandler`（支持 `.When(url, json)` / `.WithSetCookies(url, ...)`）。
 
 ## 架构要点
@@ -27,7 +28,7 @@ DanmuFree 是用户**从零自建**的 B站 / 抖音直播间弹幕桌面客户�
 - **ControlWindow 常驻**：随主窗启动、独立任务栏项、`—` 最小化（从任务栏恢复）、`×` = 退出程序（`Application.Shutdown`）。关主窗 = 退出 app（SaveSettings + 写回三窗几何）。**可调大小**（`ResizeMode=CanResizeWithGrip`，右下角拖拽缩放；设置多时拉大即可看全）+ 几何持久化（位置/大小存 settings.json，启动还原 + 屏内夹取，镜像弹幕/通知窗的 `ApplySavedGeometry`/Closing 写回）。
 - **窗口几何持久化**：弹幕窗 + 通知窗 + **控制窗** 的位置/大小存 settings.json，启动还原并做屏内夹取（拔显示器不飞屏）；**悬浮态两窗各自持久化**（`IsFloating` / `IsNotifyFloating` 存 settings.json，关闭时悬浮则下次启动仍悬浮——悬浮=鼠标穿透，退出在 ControlWindow 取消勾选）。
 - **弹幕朗读（TTS，独立第三管道）**：`OnMessageReceived` → `EnqueueForTts` 按 `MessageType` 分流：Danmu/SC 走 `TtsTextBuilder`（Core 纯逻辑、可单测：按 `TtsReadFlags`[含 **ReadUserName**] 转文本，`ReadUserName=false` 只读正文）；**礼物走 `GiftReadAggregator`（Core 纯逻辑）+ `GiftTtsPump`（App，`System.Threading.Timer` debounce）——连送同用户+同礼物在 1200ms 窗口累加成一条「xx 送了 N 个 yy」、停顿后才念（不再被刷屏读 100 次），礼物始终带用户名（事件型，不受 ReadUserName 影响）** → `Channel<string>`（bounded、DropOldest：洪水时丢旧保新）→ `TtsSpeaker`（App，NAudio 串行播放，一条播完再取下一条；**嗅探音频头：RIFF→`WaveFileReader` 读 WAV（GPT-SoVITS/System），否则→`Mp3FileReader(stream)` 解码 MP3（Edge）**）→ **`ITtsClient` 三引擎**：① `EdgeTtsClient`（**Core，`System.Net.WebSockets`，零第三方**；调 Edge「大声朗读」Azure 神经音色，**免部署、免 key、免参考音频——朋友「不会装 GPT-SoVITS」的对症解法**；`TtsEngine` 默认即 Edge。协议见下「Edge TTS 协议」）；② `GptSoVitsClient`（Core HTTP，**GET+query** 到本地 GPT-SoVITS `/tts` 取 wav 流；POST JSON 被服务拒，协议见下「GPT-SoVITS V2 /tts 协议」）；③ `SystemSpeechTtsClient`（**App 层、Windows SAPI / System.Speech**，零配置、**免参考音频**，合成到内存 WAV 复用同一条 NAudio 管道；`TtsOptions.Speed`→SAPI Rate 映射，`ListVoiceNames()` 枚举系统已装音色如 Huihui/Zira/David）。引擎/音色/服务地址在「朗读」TAB 选（VM `TtsEngine`="Edge"/"GptSoVits"/"System"，`StringEqualsConverter` 切控件可见），变更即 `RestartTtsIfRunning` 重建底层 client。**读聊天/SC/礼物，不读进场/关注**；朗读开关（`TtsEnabled` + `TtsReadFlags`）**独立于显示开关**（ShowEntry/ShowFollow/ShowGift/ShowSuperChat），即「不显示也可读」「显示但不读」均可。
-- **第三方包**：`CommunityToolkit.Mvvm` + `QRCoder` + `NAudio`（弹幕朗读播放，App 层）+ `System.Speech`（内置 TTS 引擎，Windows SAPI，App 层）。
+- **第三方包**：`CommunityToolkit.Mvvm` + `QRCoder` + `NAudio`（弹幕朗读播放 + **MP3 解码**，App 层）+ `System.Speech`（内置 TTS 引擎，Windows SAPI，App 层）。**Edge 引擎不引入任何包**（`System.Net.WebSockets` 内置）。
 
 ## Spec / 开发规范
 - **测试约束**：App 是 net8.0-windows（WPF），Tests 是 net8.0，**Tests 不能引用 App** → **Core 层 TDD**（FakeHttpHandler 模拟 HTTP / Set-Cookie；协议帧用真实抓包样本做回归），**App 层（窗口 / UI / VM）不单测**，以 `dotnet build` **0 错误 0 警告** + 用户冒烟为准。跑 `dotnet test`（Core 层共 108 单测）。
@@ -69,4 +70,4 @@ DanmuFree 是用户**从零自建**的 B站 / 抖音直播间弹幕桌面客户�
 - **⏳ WebView2 去 Node**（详细 plan：`WEBVIEW2_PLAN.md`，自包含可随时开工）：系统 WebView2 跑官方 webmssdk 取 X-Bogus，替换 `DouyinSigner`(node) + `sign/`(jsdom)。新增 `WebView2Signer : IDouyinSigner`（Core 不动）。完成后去掉 `node.exe`(80MB)+jsdom(25MB)，分发降到 ~155MB、接近单 exe、抗算法变更。
 - **候选**：多房间。
 - **暂缓 / 做不了**：B站 实时统计推送（用户暂不要）、抖音累计点赞（平台不推）、真实在线人数（平台不提供，在线=人气值）。
-- **已完成**：绿色文件夹分发版（`pack.sh`，master `009f91f`）；抖音接入全量（弹幕/进场/关注/礼物/在线/看过/等级）；弹幕朗读（TTS via GPT-SoVITS + NAudio，独立第三管道）；**Edge 在线 TTS 引擎**（`EdgeTtsClient`，免部署 Azure 神经音，朋友「不会装 GPT-SoVITS」的对症解法；默认引擎）。
+- **已完成**：绿色文件夹分发版（`pack.sh`，master `009f91f`）；抖音接入全量（弹幕/进场/关注/礼物/在线/看过/等级）；弹幕朗读三引擎（**Edge 在线**免部署 Azure 神经音 + 14 中文音色下拉显中文名、**默认引擎**；GPT-SoVITS 克隆；系统内置 SAPI 兜底；`TtsSpeaker` 嗅探 WAV/MP3；礼物连送聚合——独立第三管道）。
