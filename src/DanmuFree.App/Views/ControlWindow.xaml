@@ -213,8 +213,8 @@
                 <StackPanel Visibility="{Binding TtsEngine, Converter={StaticResource StringEquals}, ConverterParameter=Edge}">
                   <StackPanel Orientation="Horizontal" Margin="0,4">
                     <TextBlock Text="音色" VerticalAlignment="Center" Width="72"/>
-                    <ComboBox ItemsSource="{Binding EdgeVoices}" SelectedItem="{Binding TtsEdgeVoice}" Width="220"
-                              ToolTip="Azure 神经音色。晓晓(Xiao)/晓伊(Xiaoyi)=女声；云希(Yunxi)/云健(Yunjian)/云扬(Yunyang)=男声；后两个为方言"/>
+                    <ComboBox ItemsSource="{Binding EdgeVoices}" SelectedItem="{Binding TtsEdgeVoice}" Width="240"
+                              ToolTip="Azure 神经音色：普通话 6 个（晓晓/晓伊=女，云希/云健/云扬/云夏=男）+ 东北话/陕西话 + 粤语 3 个 + 台湾 3 个"/>
                   </StackPanel>
                 </StackPanel>
                 <!-- GPT-SoVITS 专属 -->
