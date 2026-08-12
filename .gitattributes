@@ -2,3 +2,6 @@
 # 导致 ./pack.sh 的 shebang 带 \r、git bash 执行立即失败）。其他文本随系统。
 *.sh text eol=lf
 *.command text eol=lf
+# Windows 批处理强制 CRLF（cmd.exe 的惯例，避免个别构造在 LF 下出问题）。
+*.cmd text eol=crlf
+*.bat text eol=crlf

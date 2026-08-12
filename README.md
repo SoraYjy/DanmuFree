@@ -39,8 +39,9 @@ B站 / 抖音直播间弹幕桌面客户端（Windows）。把弹幕 / 礼物 / 
 ```bash
 dotnet run --project src/DanmuFree.App                                   # debug 运行
 # 或双击构建产物：src/DanmuFree.App/bin/Debug/net8.0-windows/DanmuFree.exe
-./pack.sh                                                                # 自行打包绿色版 → dist/DanmuFree/（DanmuFree.exe + sign/ + node/）
+./pack.sh                          # Git Bash 里打包绿色版 → dist/DanmuFree/
 ```
+> Windows 的 **PowerShell / cmd 用 `.\pack.cmd`**（= pack.sh 的入口，别用 `.\pack.sh`——那会走 `.sh` 文件关联弹个 git-bash 窗口又秒关、看不到输出）。
 
 ### 登录 & 连接
 
