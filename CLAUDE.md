@@ -53,7 +53,8 @@ DanmuFree 是用户**从零自建**的 B站 / 抖音直播间弹幕桌面客户�
 - 仓库位置 / 工作目录：仓库根目录（git 仓库，公开在 GitHub）。**从仓库根启动 claude**——CLAUDE.md 自动读、bash 命令直接在仓库根跑、无需 `cd` 前缀。
 - **rebuild 前先 `taskkill //F //IM DanmuFree.exe`**：运行中的 app 锁 `DanmuFree.Core.dll`，否则 build 报 MSB3021 文件锁定。
 - 运行：`dotnet run --project src/DanmuFree.App`（产物 exe 名 `DanmuFree.exe`；后台启动的窗口常压在底层，用户双击 exe 更稳）。
-- **打包分发**：`bash pack.sh` → `dist/DanmuFree/`（self-contained 单文件 `DanmuFree.exe`——.NET runtime + 5 个 WPF 原生 dll 全折进 exe——+ `sign/` + `node/node.exe`，~260MB，用户无需装 .NET/Node，解压双击 exe 即用）。`dist/` gitignore 不入库；Release 不带 pdb。**抖音 node**：分发自带 `node/node.exe`（`DouyinSigner` 优先用它、回落 PATH），故用户机不用装 Node。
+- **打包分发**：入口 `pack.cmd`（Windows 双击 / PowerShell / cmd——内部 `where git` 反查 `bash.exe`；纯 ASCII 注释，末尾 `pause` 让双击能看结果）或 `bash pack.sh`（Git Bash 内）。产物 `dist/DanmuFree/`（self-contained 单文件 `DanmuFree.exe`——.NET runtime + 5 个 WPF 原生 dll 全折进 exe——+ `sign/` + `node/node.exe`，~260MB，用户无需装 .NET/Node，解压双击 exe 即用）。`dist/` gitignore 不入库；Release 不带 pdb。**抖音 node**：分发自带 `node/node.exe`（`DouyinSigner` 优先用它、回落 PATH），故用户机不用装 Node。
+- **行尾规则**（`.gitattributes` 已配，Windows `core.autocrlf=true` 环境必读）：`*.sh` 强制 LF（CRLF 会让 shebang `#!/usr/bin/env bash\r` 带 `\r`、`./pack.sh` 秒失败）；`*.cmd/*.bat` 强制 CRLF 且**注释必须纯 ASCII**（cmd.exe 按 OEM 码页读 .cmd，中文/UTF-8 会乱码误解析成命令）。新增脚本记得走这两条。
 - 配置 / 日志：`%AppData%\DanmuFree\`（`settings.json`、`log.txt`）。
 
 ## 用户偏好
