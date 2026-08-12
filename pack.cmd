@@ -13,6 +13,10 @@ cd /d "%~dp0"
 where bash >nul 2>nul
 if errorlevel 1 (
   echo bash not found. Install Git for Windows into PATH, or run ./pack.sh inside Git Bash.
+  pause
   exit /b 1
 )
 bash pack.sh %*
+echo.
+echo pack.cmd finished. Output: dist\DanmuFree\
+pause
