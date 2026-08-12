@@ -1,0 +1,4 @@
+# Shell 脚本强制 LF（Windows 上 core.autocrlf=true 会把 .sh 改成 CRLF，
+# 导致 ./pack.sh 的 shebang 带 \r、git bash 执行立即失败）。其他文本随系统。
+*.sh text eol=lf
+*.command text eol=lf
