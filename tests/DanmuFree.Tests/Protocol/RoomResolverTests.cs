@@ -11,12 +11,17 @@ public class RoomResolverTests
     private const string DanmuInfoJson = """
     {"code":0,"data":{"token":"ABC","host_list":[{"host":"broadcast-msg.chat.bilibili.com","wss_port":443}]}}
     """;
+    // getDanmuInfo 现需 WBI 签名：先调 nav 取 wbi 口令（匿名也返回 wbi_img）。
+    private const string NavJson = """
+    {"code":-101,"message":"账号未登录","data":{"wbi_img":{"img_url":"https://i0.hdslb.com/bfs/wbi/7cd084941338484aae1ad9425b84077c.png","sub_url":"https://i0.hdslb.com/bfs/wbi/4932caff0ff746eab6f01bf08b70ac45.png"}}}
+    """;
 
     [Fact]
     public async Task Resolve_returns_real_id_token_wss()
     {
         var handler = new FakeHttpHandler()
             .When("getInfoByRoom", RoomInfoJson)
+            .When("web-interface/nav", NavJson)
             .When("getDanmuInfo", DanmuInfoJson);
         var resolver = new RoomResolver(new HttpClient(handler), cookie: null);
 
@@ -33,6 +38,7 @@ public class RoomResolverTests
     {
         var handler = new FakeHttpHandler()
             .When("getInfoByRoom", RoomInfoJson)
+            .When("web-interface/nav", NavJson)
             .When("getDanmuInfo", DanmuInfoJson);
         var cookie = "DedeUserID=555; buvid3=BBB; SESSDATA=xxx";
         var resolver = new RoomResolver(new HttpClient(handler), cookie);
@@ -48,6 +54,7 @@ public class RoomResolverTests
     {
         var handler = new FakeHttpHandler()
             .When("getInfoByRoom", RoomInfoJson)
+            .When("web-interface/nav", NavJson)
             .When("getDanmuInfo", DanmuInfoJson);
         var cookie = "DedeUserID=555; buvid3=BBB; SESSDATA=xxx";
         var resolver = new RoomResolver(new HttpClient(handler), cookie);
@@ -87,6 +94,7 @@ public class RoomResolverTests
     {
         var handler = new FakeHttpHandler()
             .When("getInfoByRoom", RoomInfoJson)
+            .When("web-interface/nav", NavJson)
             .When("getDanmuInfo", """{"code":0,"data":{}}""");
         var resolver = new RoomResolver(new HttpClient(handler), null);
 

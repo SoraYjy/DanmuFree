@@ -253,7 +253,7 @@ public partial class DanmuViewModel : ViewModelBase
             if (douyin)
             {
                 _douyinSigner ??= new DouyinSigner();
-                _douyinClient = new DouyinDanmuClient(new HttpClient(), _douyinSigner);
+                _douyinClient = new DouyinDanmuClient(new HttpClient(), _douyinSigner, m => _log.Error(m));
                 _douyinClient.MessageReceived += OnMessageReceived;
                 _douyinClient.ConnectionStateChanged += OnStateChanged;
                 _douyinClient.StatsUpdated += OnDouyinStats;
@@ -267,13 +267,14 @@ public partial class DanmuViewModel : ViewModelBase
                 _stats = new StatsService(new HttpClient(), Cookie);
                 _stats.Updated += OnStatsUpdated;
                 _ = _stats.StartAsync(room, _cts.Token);
-                await _client.ConnectAsync(room, Cookie, _cts.Token);
+                await _client.ConnectAsync(room, Cookie, _cts.Token, m => _log.Error(m));
             }
         }
         catch (Exception e)
         {
             // 连接失败（房间无效 / 缺 node / 网络 / 签名失败）：提示而非崩。client 内部重连循环已由 ct 取消。
             _cts?.Cancel();
+            _log.Error($"连接失败：{e.Message}", e);
             Status = $"连接失败：{e.Message}";
         }
     }

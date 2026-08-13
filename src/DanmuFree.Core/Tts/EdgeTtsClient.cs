@@ -72,8 +72,30 @@ public sealed class EdgeTtsClient : ITtsClient
 
     public async Task<Stream> SynthesizeAsync(string text, TtsOptions opts, CancellationToken ct)
     {
+        // DRM token (Sec-MS-GEC) 基于系统时钟（向下取整到 300s 桶）。服务端 403 多半是本机时钟偏差——
+        // token 算在了错误的桶里。故 403 时依次试邻近时间桶（0、±300、±600 秒），兼容未校准时间的机器
+        // （实测：算法/版本仍有效，朋友机 403 系时钟偏差所致）。非 403（超时/网络）不重试，直接抛。
+        Exception? last = null;
+        foreach (var offset in new long[] { 0, -300, -600, 300, 600 })
+        {
+            try
+            {
+                return await SynthesizeCoreAsync(text, opts, DateTimeOffset.UtcNow.ToUnixTimeSeconds() + offset, ct);
+            }
+            catch (WebSocketException e) when (e.Message.Contains("403", StringComparison.Ordinal))
+            {
+                last = e; // 403 → 换下一个时间桶重试
+            }
+        }
+        throw new HttpRequestException(
+            "Edge TTS 握手被拒（403）。常见原因：系统时钟偏差过大——请在 Windows 设置里校准时间后再试" +
+            "（已自动尝试 ±10 分钟时间桶仍失败）。", last);
+    }
+
+    private async Task<Stream> SynthesizeCoreAsync(string text, TtsOptions opts, long unixSeconds, CancellationToken ct)
+    {
         var connectionId = Guid.NewGuid().ToString("N");
-        var gec = BuildSecMsGec(DateTimeOffset.UtcNow.ToUnixTimeSeconds());
+        var gec = BuildSecMsGec(unixSeconds);
         var url = new StringBuilder()
             .Append("wss://").Append(WssHost).Append(WssPath).Append('?')
             .Append("TrustedClientToken=").Append(TrustedClientToken)

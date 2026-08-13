@@ -22,6 +22,7 @@ public sealed class BilibiliDanmuClient
 {
     private readonly PacketDecoder _decoder = new();
     private readonly MessageParser _parser = new();
+    private Action<string>? _log;
     private ClientWebSocket? _ws;
     private CancellationTokenSource? _cts;
     private Task? _loop;
@@ -31,10 +32,11 @@ public sealed class BilibiliDanmuClient
 
     public BilibiliDanmuClient() { }
 
-    public async Task ConnectAsync(string roomId, string? cookie, CancellationToken ct)
+    public async Task ConnectAsync(string roomId, string? cookie, CancellationToken ct, Action<string>? log = null)
     {
         _cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        var resolver = new RoomResolver(new HttpClient(), cookie);
+        _log = log;
+        var resolver = new RoomResolver(new HttpClient(), cookie, log);
         var info = await resolver.ResolveAsync(roomId, _cts.Token);
         SetState(ConnectionState.Connecting);
         await ConnectInternal(info, _cts.Token);
@@ -72,7 +74,7 @@ public sealed class BilibiliDanmuClient
                 await ReceiveLoop(ct);
             }
             catch (OperationCanceledException) { break; }
-            catch (Exception) { /* 记日志 */ }
+            catch (Exception e) { _log?.Invoke($"B站 连接异常，第 {attempt + 1} 次重连：{e.Message}"); }
             // 指数退避重连
             attempt++;
             SetState(ConnectionState.Reconnecting);

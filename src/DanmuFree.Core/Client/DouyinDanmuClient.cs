@@ -20,6 +20,7 @@ public sealed class DouyinDanmuClient
 
     private readonly HttpClient _http;
     private readonly IDouyinSigner _signer;
+    private Action<string>? _log;
     private ClientWebSocket? _ws;
     private CancellationTokenSource? _cts;
     private Task? _loop;
@@ -31,10 +32,11 @@ public sealed class DouyinDanmuClient
     // 注：抖音只推增量点赞(LikeMessage)，无累计点赞总数，故无 Likes。
     public event Action<DouyinRoomStats>? StatsUpdated;
 
-    public DouyinDanmuClient(HttpClient http, IDouyinSigner signer)
+    public DouyinDanmuClient(HttpClient http, IDouyinSigner signer, Action<string>? log = null)
     {
         _http = http;
         _signer = signer;
+        _log = log;
     }
 
     public async Task ConnectAsync(string webRid, CancellationToken ct)
@@ -43,6 +45,9 @@ public sealed class DouyinDanmuClient
         _userUniqueId = RandomDigits(19); // 匿名设备 id，每次连接新生成
         var resolver = new DouyinRoomResolver(_http);
         var info = await resolver.ResolveAsync(webRid, _cts.Token);
+        // 记录解析结果：ttwid 为空时 WS 握手必失败 → 表现为「一直重连」。这条日志是定位抖音重连的关键。
+        _log?.Invoke($"抖音房间解析：web_rid={webRid}, room_id={info.RoomId}（{info.RoomId.Length}位），" +
+                     $"ttwid={(string.IsNullOrEmpty(info.Ttwid) ? "空（WS 握手会失败）" : "已获取")}");
         SetState(ConnectionState.Connecting);
         await ConnectInternal(info, _cts.Token);
     }
@@ -87,7 +92,7 @@ public sealed class DouyinDanmuClient
                 await ReceiveLoop(ct);
             }
             catch (OperationCanceledException) { break; }
-            catch (Exception) { /* 记日志 */ }
+            catch (Exception e) { _log?.Invoke($"抖音 连接异常，第 {attempt + 1} 次重连：{e.Message}"); }
             attempt++;
             SetState(ConnectionState.Reconnecting);
             await Task.Delay(Math.Min(30000, 1000 * (1 << Math.Min(attempt, 5))), ct);
