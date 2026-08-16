@@ -6,15 +6,16 @@ using NAudio.Wave;
 namespace DanmuFree.App.Services;
 
 /// <summary>
-/// 朗读消费泵：从 bounded Channel 取文本 → ITtsClient 合成 → NAudio 串行播放。
-/// 合成返回 WAV（GPT-SoVITS / SystemSpeech）直读 WaveFileReader；返回 MP3（Edge 在线）用 Mp3FileReader 解码。
+/// 朗读消费泵：从 bounded Channel 取 <see cref="TtsItem"/> → 文本走 ITtsClient 合成、音频文件直读 → NAudio 串行播放。
+/// 合成返回 WAV（GPT-SoVITS / SystemSpeech）直读 WaveFileReader；返回 MP3（Edge 在线）用 Mp3FileReader 解码；
+/// 定向回复「播音频」的本地 wav/mp3 复用同一条嗅探解码路径。
 /// 串行不打断（播完一条再下一条）；Channel DropOldest 在洪水时丢最旧、紧跟最新。
 /// 单条合成/播放失败：catch 跳过，继续队列，绝不抛回收弹幕主路径。
 /// </summary>
 public sealed class TtsSpeaker : IDisposable
 {
     private readonly ITtsClient _client;
-    private readonly Channel<string> _channel;
+    private readonly Channel<TtsItem> _channel;
     private readonly FileLogger? _log;
     private TtsOptions _opts;
     private float _volume = 1f;
@@ -22,13 +23,13 @@ public sealed class TtsSpeaker : IDisposable
     private CancellationTokenSource? _cts;
     private Task? _loop;
 
-    public ChannelWriter<string> Writer => _channel.Writer;
+    public ChannelWriter<TtsItem> Writer => _channel.Writer;
 
     public TtsSpeaker(ITtsClient client, int capacity, FileLogger? log = null)
     {
         _client = client;
         _log = log;
-        _channel = Channel.CreateBounded<string>(new BoundedChannelOptions(capacity)
+        _channel = Channel.CreateBounded<TtsItem>(new BoundedChannelOptions(capacity)
         { FullMode = BoundedChannelFullMode.DropOldest, SingleReader = true });
         _opts = new TtsOptions();
     }
@@ -58,12 +59,16 @@ public sealed class TtsSpeaker : IDisposable
         {
             while (await _channel.Reader.WaitToReadAsync(ct))
             {
-                if (!_channel.Reader.TryRead(out var text)) continue;
+                if (!_channel.Reader.TryRead(out var item)) continue;
                 WaveOutEvent? wo = null;
                 WaveStream? reader = null;
                 try
                 {
-                    using var stream = await _client.SynthesizeAsync(text, _opts, ct);
+                    // 播音频（定向回复）：直接读本地文件（不存在 → FileNotFoundException → 下方 catch 跳过）；
+                    // 念文本：走当前引擎合成。
+                    using var stream = item.SoundPath is { Length: > 0 } path
+                        ? new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read)
+                        : await _client.SynthesizeAsync(item.Text!, _opts, ct);
                     var tcs = new TaskCompletionSource();
                     wo = new WaveOutEvent { Volume = _volume };
                     _current = wo;
@@ -116,4 +121,12 @@ public sealed class TtsSpeaker : IDisposable
         }
         finally { s.Position = pos; }
     }
+}
+
+/// <summary>朗读队列条目，二选一：<see cref="Text"/> = 走引擎合成的文本；
+/// <see cref="SoundPath"/> = 直接播放的本地音频文件（wav/mp3，定向回复「播音频」）。</summary>
+public readonly record struct TtsItem(string? Text, string? SoundPath)
+{
+    public static TtsItem Speech(string text) => new(text, null);
+    public static TtsItem Sound(string path) => new(null, path);
 }

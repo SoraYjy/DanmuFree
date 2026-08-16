@@ -12,7 +12,7 @@ namespace DanmuFree.App.Services;
 /// </summary>
 public sealed class GiftTtsPump : IDisposable
 {
-    private readonly ChannelWriter<string> _writer;
+    private readonly ChannelWriter<TtsItem> _writer;
     private readonly GiftReadAggregator _agg = new();
     private readonly Timer _timer;
     private readonly int _windowMs;
@@ -20,7 +20,7 @@ public sealed class GiftTtsPump : IDisposable
     private readonly object _lock = new();
     private bool _disposed;
 
-    public GiftTtsPump(ChannelWriter<string> writer, IReadOnlyList<string> blocked, int windowMs)
+    public GiftTtsPump(ChannelWriter<TtsItem> writer, IReadOnlyList<string> blocked, int windowMs)
     {
         _writer = writer;
         _blocked = blocked;
@@ -60,7 +60,7 @@ public sealed class GiftTtsPump : IDisposable
         if (string.IsNullOrWhiteSpace(text)) return;
         foreach (var w in _blocked)
             if (!string.IsNullOrEmpty(w) && text.Contains(w)) return;  // 命中屏蔽词：不读
-        _writer.TryWrite(text);
+        _writer.TryWrite(TtsItem.Speech(text));
     }
 
     public void Dispose()

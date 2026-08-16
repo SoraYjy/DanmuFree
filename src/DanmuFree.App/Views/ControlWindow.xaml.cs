@@ -81,4 +81,12 @@ public partial class ControlWindow : Window
         if (dlg.ShowDialog() == true && DataContext is ViewModels.DanmuViewModel vm)
             vm.TtsRefAudioPath = dlg.FileName;
     }
+
+    // 定向回复规则行「…」：选音频文件，写回该行规则（sender 的 DataContext 即行模型）。
+    private void OnPickReplySound(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is not ViewModels.ReplyRuleViewModel rule) return;
+        var dlg = new OpenFileDialog { Filter = "音频文件 (*.wav;*.mp3)|*.wav;*.mp3|所有文件|*.*" };
+        if (dlg.ShowDialog() == true) rule.SoundPath = dlg.FileName;
+    }
 }

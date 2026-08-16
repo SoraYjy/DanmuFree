@@ -32,6 +32,12 @@ public partial class DanmuViewModel : ViewModelBase
     // 进场 / 关注：单独一个集合 + 独立通知窗（与弹幕窗分离）。
     public ObservableCollection<RichMessage> NotifyMessages { get; } = new();
 
+    // 定向回复规则（可编辑行，控制窗「定向回复」TAB 绑定）：弹幕正文命中关键词 → 不读原文，
+    // 改念指定文字/播指定音频（Core.ReplyRuleMatcher 首条命中即停）。
+    public ObservableCollection<ReplyRuleViewModel> ReplyRules { get; } = new();
+    // 收包线程（WS 回调里匹配）与 UI 线程（增删/上移/下移）共用一把锁，防枚举中途集合被改。
+    private readonly object _replyLock = new();
+
     // 系统字体名（供设置面板下拉）
     public string[] SystemFonts { get; } =
         System.Windows.Media.Fonts.SystemFontFamilies.Select(f => f.Source).OrderBy(n => n).ToArray();
@@ -182,6 +188,15 @@ public partial class DanmuViewModel : ViewModelBase
         TtsMaxLength = s.TtsMaxLength;
         TtsQueueCapacity = s.TtsQueueCapacity;
         TtsBlockedWords = s.TtsBlockedWords ?? "";
+        // 定向回复规则（顺序即匹配优先级，列表顺序原样还原）
+        foreach (var r in s.ReplyRules)
+            ReplyRules.Add(new ReplyRuleViewModel
+            {
+                Keyword = r.Keyword,
+                Action = r.Action == "sound" ? "sound" : "text",
+                Text = r.Text,
+                SoundPath = r.SoundPath,
+            });
         // 枚举系统内置引擎可选音色（一次性；与设置无关）。
         if (SystemVoices.Count == 0)
             foreach (var name in SystemSpeechTtsClient.ListVoiceNames())
@@ -408,6 +423,10 @@ public partial class DanmuViewModel : ViewModelBase
             TtsMaxLength = TtsMaxLength,
             TtsQueueCapacity = TtsQueueCapacity,
             TtsBlockedWords = TtsBlockedWords,
+            ReplyRules = ReplyRules.Select(r => new ReplyRuleConfig
+            {
+                Keyword = r.Keyword, Action = r.Action, Text = r.Text, SoundPath = r.SoundPath,
+            }).ToList(),
         });
     }
 
@@ -486,17 +505,85 @@ public partial class DanmuViewModel : ViewModelBase
             if (TtsReadGift) _giftPump?.Add(m.UserName, m.Extra);
             return;
         }
+        // 定向回复：Danmu 正文命中关键词 → 不读原弹幕，改念指定文字 / 播指定音频（首条命中即停）。
+        // 独立于「读弹幕」开关（可关掉普通弹幕朗读、只留定向回复）；回复原样播报，
+        // 不走屏蔽词/字数上限/读用户名（用户显式配置的内容，不该被再过滤）。
+        if (m.Type == MessageType.Danmu && ReplyRules.Count > 0)
+        {
+            ReplyRule? hit;
+            lock (_replyLock)
+                hit = ReplyRuleMatcher.MatchFirst(ReplyRules.Select(r => r.ToRule()), m.Text);
+            if (hit is not null)
+            {
+                _ttsSpeaker.Writer.TryWrite(hit.Action == ReplyAction.PlaySound
+                    ? TtsItem.Sound(hit.SoundPath)
+                    : TtsItem.Speech(hit.Text));
+                return;
+            }
+        }
         var toRead = TtsTextBuilder.Build(m,
             new TtsReadFlags(TtsReadDanmu, TtsReadSuperChat, TtsReadGift, TtsReadUserName),
             ParseBlocked(TtsBlockedWords), TtsMaxLength);
         if (toRead is not null)
-            _ttsSpeaker.Writer.TryWrite(toRead);
+            _ttsSpeaker.Writer.TryWrite(TtsItem.Speech(toRead));
+    }
+
+    // —— 定向回复规则管理（UI 线程增删/移动；与收包线程的匹配共用 _replyLock）——
+
+    [RelayCommand]
+    private void AddReplyRule()
+    {
+        lock (_replyLock) ReplyRules.Add(new ReplyRuleViewModel());
+    }
+
+    [RelayCommand]
+    private void RemoveReplyRule(ReplyRuleViewModel rule)
+    {
+        lock (_replyLock) ReplyRules.Remove(rule);
+    }
+
+    [RelayCommand]
+    private void MoveReplyRuleUp(ReplyRuleViewModel rule)
+    {
+        lock (_replyLock)
+        {
+            int i = ReplyRules.IndexOf(rule);
+            if (i > 0) ReplyRules.Move(i, i - 1);
+        }
+    }
+
+    [RelayCommand]
+    private void MoveReplyRuleDown(ReplyRuleViewModel rule)
+    {
+        lock (_replyLock)
+        {
+            int i = ReplyRules.IndexOf(rule);
+            if (i >= 0 && i < ReplyRules.Count - 1) ReplyRules.Move(i, i + 1);
+        }
+    }
+
+    [RelayCommand]
+    private void TestReplyRule(ReplyRuleViewModel rule)
+    {
+        // 试听：不经弹幕，把该规则的回复直接塞进朗读队列（念文字走当前引擎；播音频直接放文件）
+        if (rule.Action == "sound")
+        {
+            if (string.IsNullOrWhiteSpace(rule.SoundPath)) return;
+            EnsureTtsSpeaker();
+            _ttsSpeaker!.Writer.TryWrite(TtsItem.Sound(rule.SoundPath));
+        }
+        else
+        {
+            if (string.IsNullOrWhiteSpace(rule.Text)) return;
+            EnsureTtsSpeaker();
+            _ttsSpeaker!.Writer.TryWrite(TtsItem.Speech(rule.Text));
+        }
     }
 
     [RelayCommand]
     private void TestTts()
     {
         EnsureTtsSpeaker();
-        _ttsSpeaker!.Writer.TryWrite("弹幕朗读测试。");
+        _ttsSpeaker!.Writer.TryWrite(TtsItem.Speech("弹幕朗读测试。"));
     }
 }

@@ -84,4 +84,16 @@ public sealed class AppSettings
     public int TtsMaxLength { get; set; } = 80;
     public int TtsQueueCapacity { get; set; } = 5;
     public string? TtsBlockedWords { get; set; } = "";
+
+    // 定向回复规则（弹幕命中关键词 → 不读原文，改念文字/播音频；从上往下首条命中即停）。
+    public List<ReplyRuleConfig> ReplyRules { get; set; } = new();
+}
+
+/// <summary>一条定向回复规则的持久化形状（可编辑行模型是 ReplyRuleViewModel，存盘/读盘时互转）。</summary>
+public sealed class ReplyRuleConfig
+{
+    public string Keyword { get; set; } = "";
+    public string Action { get; set; } = "text";   // "text" 念文字 / "sound" 播音频
+    public string Text { get; set; } = "";
+    public string SoundPath { get; set; } = "";
 }
