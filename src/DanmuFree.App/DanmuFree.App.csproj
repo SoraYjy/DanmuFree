@@ -17,17 +17,26 @@
     <Content Include="sign\**" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Using Remove="System.Windows.Forms" />
+    <Using Remove="System.Drawing" />
+  </ItemGroup>
+
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
+    <!-- WinForms 仅为一件事：描边色选色的 Win32 颜色盘（System.Windows.Forms.ColorDialog，零第三方）。
+         WinForms SDK 会隐式 global using System.Windows.Forms/System.Drawing，与 WPF 的
+         Application/Color/Timer 等撞名（CS0104），这里移除、用时全限定名。 -->
+    <UseWindowsForms>true</UseWindowsForms>
 
     <!-- 产物名 / 元数据（右键 exe → 属性 → 详细信息可见） -->
     <AssemblyName>DanmuFree</AssemblyName>
     <RootNamespace>DanmuFree.App</RootNamespace>
-    <Version>1.0.4</Version>
+    <Version>1.0.5</Version>
     <Company>Sora</Company>
     <Product>DanmuFree</Product>
     <Description>B站 / 抖音直播间弹幕桌面客户端</Description>

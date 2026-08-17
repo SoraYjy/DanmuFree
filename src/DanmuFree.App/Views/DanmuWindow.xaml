@@ -3,6 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:m="clr-namespace:DanmuFree.Core.Models;assembly=DanmuFree.Core"
         xmlns:c="clr-namespace:DanmuFree.App.Converters"
+        xmlns:controls="clr-namespace:DanmuFree.App.Controls"
         Title="DanmuFree" Height="600" Width="480"
         Topmost="{Binding EffectiveTopmost}"
         WindowStyle="None"
@@ -15,25 +16,30 @@
     <c:OpacityToBackgroundConverter x:Key="OpacityToBg"/>
     <c:TimeIfShownConverter x:Key="TimeIfShown"/>
     <DataTemplate DataType="{x:Type m:RichMessage}">
-      <TextBlock TextWrapping="Wrap"
-                 Foreground="{Binding Type, Converter={StaticResource TypeBrush}}">
-        <Run Foreground="#FF888888">
-          <Run.Text>
-            <MultiBinding Converter="{StaticResource TimeIfShown}">
-              <Binding Path="Time"/>
-              <Binding Path="DataContext.ShowTime" RelativeSource="{RelativeSource AncestorType=Window}"/>
-            </MultiBinding>
-          </Run.Text>
-        </Run>
-        <Run Text="{Binding Medal}" Foreground="#FFFFD54F"/><Run Text=" "/>
-        <Run Text="{Binding UserName}"
-             FontFamily="{Binding DataContext.UserNameFontFamily, RelativeSource={RelativeSource AncestorType=Window}}"
-             Foreground="{Binding DataContext.UserNameColor, RelativeSource={RelativeSource AncestorType=Window}}"/><Run Text=": "/>
-        <Run Text="{Binding Text}"
-             FontFamily="{Binding DataContext.DanmuFontFamily, RelativeSource={RelativeSource AncestorType=Window}}"
-             Foreground="{Binding DataContext.DanmuColor, RelativeSource={RelativeSource AncestorType=Window}}"/>
-        <Run Text="{Binding Extra}" FontWeight="Bold"/>
-      </TextBlock>
+      <!-- 描边容器：Thickness=DanmuOutlineDepth（描边关时 0，视觉无变化）；文字原色/绑定不受影响 -->
+      <controls:OutlineHost
+          Stroke="{Binding DataContext.DanmuOutlineColor, RelativeSource={RelativeSource AncestorType=Window}}"
+          Thickness="{Binding DataContext.DanmuOutlineDepth, RelativeSource={RelativeSource AncestorType=Window}}">
+        <TextBlock TextWrapping="Wrap"
+                   Foreground="{Binding Type, Converter={StaticResource TypeBrush}}">
+          <Run Foreground="#FF888888">
+            <Run.Text>
+              <MultiBinding Converter="{StaticResource TimeIfShown}">
+                <Binding Path="Time"/>
+                <Binding Path="DataContext.ShowTime" RelativeSource="{RelativeSource AncestorType=Window}"/>
+              </MultiBinding>
+            </Run.Text>
+          </Run>
+          <Run Text="{Binding Medal}" Foreground="#FFFFD54F"/><Run Text=" "/>
+          <Run Text="{Binding UserName}"
+               FontFamily="{Binding DataContext.UserNameFontFamily, RelativeSource={RelativeSource AncestorType=Window}}"
+               Foreground="{Binding DataContext.UserNameColor, RelativeSource={RelativeSource AncestorType=Window}}"/><Run Text=": "/>
+          <Run Text="{Binding Text}"
+               FontFamily="{Binding DataContext.DanmuFontFamily, RelativeSource={RelativeSource AncestorType=Window}}"
+               Foreground="{Binding DataContext.DanmuColor, RelativeSource={RelativeSource AncestorType=Window}}"/>
+          <Run Text="{Binding Extra}" FontWeight="Bold"/>
+        </TextBlock>
+      </controls:OutlineHost>
     </DataTemplate>
     <!-- 悬浮时变淡 + 鼠标穿透（统计条：悬浮时也显示，只更透、不挡操作） -->
     <Style x:Key="DimWhenFloating" TargetType="FrameworkElement">

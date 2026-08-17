@@ -93,7 +93,22 @@
                 </StackPanel>
                 <StackPanel Orientation="Horizontal" Margin="0,4">
                   <TextBlock Text="字号" VerticalAlignment="Center" Width="72"/>
-                  <Slider Minimum="8" Maximum="24" Value="{Binding FontSize}" TickFrequency="1" IsSnapToTickEnabled="True" Width="220" VerticalAlignment="Center"/>
+                  <Slider Minimum="8" Maximum="100" Value="{Binding FontSize}" TickFrequency="1" IsSnapToTickEnabled="True" Width="220" VerticalAlignment="Center"
+                          ToolTip="8~100（4K 大屏可开大）"/>
+                </StackPanel>
+                <!-- 文字描边：给每条弹幕套一圈硬外轮廓（游戏画面等复杂背景上更易读） -->
+                <CheckBox Content="文字描边" IsChecked="{Binding DanmuOutline}" Foreground="#FFCCCCCC" Margin="0,4"
+                          ToolTip="给每条弹幕加一圈硬描边（默认黑色，可在下两行改色/粗细）"/>
+                <StackPanel Orientation="Horizontal" Margin="0,4">
+                  <TextBlock Text="描边色" VerticalAlignment="Center" Width="72"/>
+                  <Button Width="34" Height="22" Click="OnPickDanmuOutlineColor" ToolTip="点开颜色盘选择"
+                          Background="{Binding DanmuOutlineColor}" BorderBrush="#FF888888"/>
+                  <TextBox Text="{Binding DanmuOutlineColor, UpdateSourceTrigger=PropertyChanged}" Width="78" Margin="6,0,0,0" VerticalAlignment="Center"
+                           ToolTip="也可手填 #RRGGBB / #AARRGGBB"/>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,4">
+                  <TextBlock Text="描边粗细" VerticalAlignment="Center" Width="72"/>
+                  <Slider Minimum="0.5" Maximum="6" Value="{Binding DanmuOutlineThickness}" TickFrequency="0.5" IsSnapToTickEnabled="True" Width="220" VerticalAlignment="Center"/>
                 </StackPanel>
                 <StackPanel Orientation="Horizontal" Margin="0,4">
                   <TextBlock Text="字体" VerticalAlignment="Center" Width="72"/>
@@ -165,7 +180,22 @@
               </StackPanel>
               <StackPanel Orientation="Horizontal" Margin="0,4">
                 <TextBlock Text="字号" VerticalAlignment="Center" Width="72"/>
-                <Slider Minimum="8" Maximum="24" Value="{Binding NotifyFontSize}" TickFrequency="1" IsSnapToTickEnabled="True" Width="220" VerticalAlignment="Center"/>
+                <Slider Minimum="8" Maximum="100" Value="{Binding NotifyFontSize}" TickFrequency="1" IsSnapToTickEnabled="True" Width="220" VerticalAlignment="Center"
+                        ToolTip="8~100（4K 大屏可开大）"/>
+              </StackPanel>
+              <!-- 文字描边（通知窗独立设置） -->
+              <CheckBox Content="文字描边" IsChecked="{Binding NotifyOutline}" Foreground="#FFCCCCCC" Margin="0,4"
+                        ToolTip="给进场/关注/礼物文字加一圈硬描边（独立于弹幕窗的描边设置）"/>
+              <StackPanel Orientation="Horizontal" Margin="0,4">
+                <TextBlock Text="描边色" VerticalAlignment="Center" Width="72"/>
+                <Button Width="34" Height="22" Click="OnPickNotifyOutlineColor" ToolTip="点开颜色盘选择"
+                        Background="{Binding NotifyOutlineColor}" BorderBrush="#FF888888"/>
+                <TextBox Text="{Binding NotifyOutlineColor, UpdateSourceTrigger=PropertyChanged}" Width="78" Margin="6,0,0,0" VerticalAlignment="Center"
+                         ToolTip="也可手填 #RRGGBB / #AARRGGBB"/>
+              </StackPanel>
+              <StackPanel Orientation="Horizontal" Margin="0,4">
+                <TextBlock Text="描边粗细" VerticalAlignment="Center" Width="72"/>
+                <Slider Minimum="0.5" Maximum="6" Value="{Binding NotifyOutlineThickness}" TickFrequency="0.5" IsSnapToTickEnabled="True" Width="220" VerticalAlignment="Center"/>
               </StackPanel>
               <StackPanel Orientation="Horizontal" Margin="0,4">
                 <TextBlock Text="字体" VerticalAlignment="Center" Width="72"/>
@@ -297,6 +327,8 @@
                       <Border Background="#FF2A2A2A" CornerRadius="3" Padding="6" Margin="0,4,0,0">
                         <StackPanel>
                           <StackPanel Orientation="Horizontal">
+                            <CheckBox IsChecked="{Binding Enabled}" VerticalAlignment="Center" Margin="0,0,6,0"
+                                      ToolTip="不勾选 = 临时禁用这条规则（配置保留，随时勾回）"/>
                             <TextBlock Text="关键词" Width="56" VerticalAlignment="Center"/>
                             <TextBox Text="{Binding Keyword, UpdateSourceTrigger=PropertyChanged}" Width="110" VerticalAlignment="Center"
                                      ToolTip="弹幕正文包含该词即命中（不分大小写）"/>

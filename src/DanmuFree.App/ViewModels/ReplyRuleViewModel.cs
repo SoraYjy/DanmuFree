@@ -23,11 +23,13 @@ public partial class ReplyRuleViewModel : ObservableObject
     [ObservableProperty] private string _action = "text";   // "text" 念文字 / "sound" 播音频
     [ObservableProperty] private string _text = "";
     [ObservableProperty] private string _soundPath = "";
+    [ObservableProperty] private bool _enabled = true;      // 行首勾选框：不勾=临时禁用（配置保留）
 
     /// <summary>转 Core 匹配用规则（去空白；字符串动作 → 枚举）。</summary>
     public ReplyRule ToRule() => new(
         Keyword.Trim(),
         Action == "sound" ? ReplyAction.PlaySound : ReplyAction.SpeakText,
         Text.Trim(),
-        SoundPath.Trim());
+        SoundPath.Trim(),
+        Enabled);
 }

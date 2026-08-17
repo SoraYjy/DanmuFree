@@ -36,6 +36,14 @@ public sealed class AppSettings
     public string? DanmuFontFamily { get; set; }
     public string? DanmuColor { get; set; }
 
+    // 文字描边（外轮廓，复杂背景更易读）：弹幕窗 / 通知窗各自独立。旧 settings.json 无这些字段 → 默认关。
+    public bool DanmuOutline { get; set; } = false;
+    public string DanmuOutlineColor { get; set; } = "#FF000000";
+    public double DanmuOutlineThickness { get; set; } = 1.5;
+    public bool NotifyOutline { get; set; } = false;
+    public string NotifyOutlineColor { get; set; } = "#FF000000";
+    public double NotifyOutlineThickness { get; set; } = 1.5;
+
     // 悬浮（沉浸置顶 · 鼠标穿透）：两窗各自持久化（关闭时悬浮，下次启动仍是悬浮态）。
     public bool IsFloating { get; set; } = false;         // 主弹幕窗悬浮
     public bool IsNotifyFloating { get; set; } = false;   // 进场/关注窗悬浮
@@ -96,4 +104,5 @@ public sealed class ReplyRuleConfig
     public string Action { get; set; } = "text";   // "text" 念文字 / "sound" 播音频
     public string Text { get; set; } = "";
     public string SoundPath { get; set; } = "";
+    public bool Enabled { get; set; } = true;      // 旧 settings.json 无此字段 → 反序列化取默认 true，兼容
 }

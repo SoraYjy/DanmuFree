@@ -101,4 +101,33 @@ public class ReplyRuleTests
         Assert.NotNull(hit);
         Assert.Equal("这就唱", hit!.Text);
     }
+
+    // —— 启用/禁用开关（控制窗行首勾选框；禁用=临时不参与匹配，配置保留）——
+
+    [Fact]
+    public void Enabled_defaults_true()
+    {
+        // 旧代码/旧 settings.json 用 3~4 参构造，默认必须是启用（否则升级后全部静默失效）。
+        Assert.True(new ReplyRule("唱歌", ReplyAction.SpeakText, "这就唱").Enabled);
+    }
+
+    [Fact]
+    public void Disabled_rule_does_not_match()
+    {
+        var rules = new[] { new ReplyRule("唱歌", ReplyAction.SpeakText, "这就唱", Enabled: false) };
+        Assert.Null(ReplyRuleMatcher.MatchFirst(rules, "唱歌助兴"));
+    }
+
+    [Fact]
+    public void Disabled_rule_falls_through_to_later_rule()
+    {
+        var rules = new[]
+        {
+            new ReplyRule("唱歌", ReplyAction.SpeakText, "被禁用了", Enabled: false),
+            new ReplyRule("助兴", ReplyAction.SpeakText, "第二条"),
+        };
+        var hit = ReplyRuleMatcher.MatchFirst(rules, "唱歌助兴");
+        Assert.NotNull(hit);
+        Assert.Equal("第二条", hit!.Text);
+    }
 }

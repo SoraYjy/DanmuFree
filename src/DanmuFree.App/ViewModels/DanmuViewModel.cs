@@ -87,6 +87,11 @@ public partial class DanmuViewModel : ViewModelBase
     [ObservableProperty] private string _danmuFontFamily = "Microsoft YaHei UI";
     [ObservableProperty] private string _danmuColor = "#FFFFFFFF";
 
+    // 文字描边（弹幕窗）：复杂背景（游戏画面）上更易读；关 = Thickness 0（视觉无变化）
+    [ObservableProperty] private bool _danmuOutline;
+    [ObservableProperty] private string _danmuOutlineColor = "#FF000000";
+    [ObservableProperty] private double _danmuOutlineThickness = 1.5;
+
     // 进场 / 关注 通知窗（独立窗口 / 独立大小 / 独立沉浸）
     [ObservableProperty] private bool _showEntry = true;          // 接收「进入直播间」
     [ObservableProperty] private bool _showFollow = true;         // 接收「关注了主播」
@@ -97,6 +102,11 @@ public partial class DanmuViewModel : ViewModelBase
     [ObservableProperty] private double _notifyOpacity = 1.0;
     [ObservableProperty] private string _notifyFontFamily = "Microsoft YaHei UI";
     [ObservableProperty] private double _notifyFontSize = 13;
+
+    // 文字描边（通知窗）：独立于弹幕窗描边设置
+    [ObservableProperty] private bool _notifyOutline;
+    [ObservableProperty] private string _notifyOutlineColor = "#FF000000";
+    [ObservableProperty] private double _notifyOutlineThickness = 1.5;
 
     // 弹幕朗读（独立于显示开关；GPT-SoVITS 本地服务）
     [ObservableProperty] private bool _ttsEnabled;
@@ -157,6 +167,9 @@ public partial class DanmuViewModel : ViewModelBase
         UserNameColor = string.IsNullOrEmpty(s.UserNameColor) ? "#FF69B7FF" : s.UserNameColor;
         DanmuFontFamily = string.IsNullOrEmpty(s.DanmuFontFamily) ? FontFamily : s.DanmuFontFamily;
         DanmuColor = string.IsNullOrEmpty(s.DanmuColor) ? "#FFFFFFFF" : s.DanmuColor;
+        DanmuOutline = s.DanmuOutline;
+        DanmuOutlineColor = string.IsNullOrEmpty(s.DanmuOutlineColor) ? "#FF000000" : s.DanmuOutlineColor;
+        DanmuOutlineThickness = s.DanmuOutlineThickness;
         // 进场 / 关注 窗
         ShowEntry = s.ShowEntry;
         ShowFollow = s.ShowFollow;
@@ -167,6 +180,9 @@ public partial class DanmuViewModel : ViewModelBase
         NotifyOpacity = s.NotifyOpacity;
         NotifyFontFamily = string.IsNullOrEmpty(s.NotifyFontFamily) ? "Microsoft YaHei UI" : s.NotifyFontFamily;
         NotifyFontSize = s.NotifyFontSize;
+        NotifyOutline = s.NotifyOutline;
+        NotifyOutlineColor = string.IsNullOrEmpty(s.NotifyOutlineColor) ? "#FF000000" : s.NotifyOutlineColor;
+        NotifyOutlineThickness = s.NotifyOutlineThickness;
         // 两窗几何
         MainLeft = s.MainLeft; MainTop = s.MainTop; MainWidth = s.MainWidth; MainHeight = s.MainHeight;
         NotifyLeft = s.NotifyLeft; NotifyTop = s.NotifyTop; NotifyWidth = s.NotifyWidth; NotifyHeight = s.NotifyHeight;
@@ -196,6 +212,7 @@ public partial class DanmuViewModel : ViewModelBase
                 Action = r.Action == "sound" ? "sound" : "text",
                 Text = r.Text,
                 SoundPath = r.SoundPath,
+                Enabled = r.Enabled,
             });
         // 枚举系统内置引擎可选音色（一次性；与设置无关）。
         if (SystemVoices.Count == 0)
@@ -230,6 +247,14 @@ public partial class DanmuViewModel : ViewModelBase
         OnPropertyChanged(nameof(EffectiveNotifyOpacity));
     }
     partial void OnNotifyOpacityChanged(double value) => OnPropertyChanged(nameof(EffectiveNotifyOpacity));
+
+    // 描边生效粗细：开关关 → 0（OutlineHost.Thickness=0 时影子与文字完全重合，无视觉变化）
+    public double DanmuOutlineDepth => DanmuOutline ? DanmuOutlineThickness : 0;
+    public double NotifyOutlineDepth => NotifyOutline ? NotifyOutlineThickness : 0;
+    partial void OnDanmuOutlineChanged(bool value) => OnPropertyChanged(nameof(DanmuOutlineDepth));
+    partial void OnDanmuOutlineThicknessChanged(double value) => OnPropertyChanged(nameof(DanmuOutlineDepth));
+    partial void OnNotifyOutlineChanged(bool value) => OnPropertyChanged(nameof(NotifyOutlineDepth));
+    partial void OnNotifyOutlineThicknessChanged(double value) => OnPropertyChanged(nameof(NotifyOutlineDepth));
 
     private void RefreshUserInfo()
     {
@@ -394,6 +419,9 @@ public partial class DanmuViewModel : ViewModelBase
             UserNameColor = UserNameColor,
             DanmuFontFamily = DanmuFontFamily,
             DanmuColor = DanmuColor,
+            DanmuOutline = DanmuOutline,
+            DanmuOutlineColor = DanmuOutlineColor,
+            DanmuOutlineThickness = DanmuOutlineThickness,
             ShowEntry = ShowEntry,
             ShowFollow = ShowFollow,
             ShowGift = ShowGift,
@@ -403,6 +431,9 @@ public partial class DanmuViewModel : ViewModelBase
             NotifyOpacity = NotifyOpacity,
             NotifyFontFamily = NotifyFontFamily,
             NotifyFontSize = NotifyFontSize,
+            NotifyOutline = NotifyOutline,
+            NotifyOutlineColor = NotifyOutlineColor,
+            NotifyOutlineThickness = NotifyOutlineThickness,
             MainLeft = MainLeft, MainTop = MainTop, MainWidth = MainWidth, MainHeight = MainHeight,
             NotifyLeft = NotifyLeft, NotifyTop = NotifyTop, NotifyWidth = NotifyWidth, NotifyHeight = NotifyHeight,
             ControlLeft = ControlLeft, ControlTop = ControlTop, ControlWidth = ControlWidth, ControlHeight = ControlHeight,
@@ -425,7 +456,7 @@ public partial class DanmuViewModel : ViewModelBase
             TtsBlockedWords = TtsBlockedWords,
             ReplyRules = ReplyRules.Select(r => new ReplyRuleConfig
             {
-                Keyword = r.Keyword, Action = r.Action, Text = r.Text, SoundPath = r.SoundPath,
+                Keyword = r.Keyword, Action = r.Action, Text = r.Text, SoundPath = r.SoundPath, Enabled = r.Enabled,
             }).ToList(),
         });
     }

@@ -4,8 +4,9 @@ namespace DanmuFree.Core.Tts;
 public enum ReplyAction { SpeakText, PlaySound }
 
 /// <summary>定向回复规则：弹幕正文命中 <see cref="Keyword"/> → 不读原弹幕，改为执行 <see cref="Action"/>
-/// （念 <see cref="Text"/> / 播 <see cref="SoundPath"/>）。UI 可编辑行模型在 App 层，匹配前转换。</summary>
-public sealed record ReplyRule(string Keyword, ReplyAction Action, string Text = "", string SoundPath = "");
+/// （念 <see cref="Text"/> / 播 <see cref="SoundPath"/>）。<see cref="Enabled"/>=false 的规则不参与匹配
+/// （控制窗行首勾选框，临时禁用保留配置）。UI 可编辑行模型在 App 层，匹配前转换。</summary>
+public sealed record ReplyRule(string Keyword, ReplyAction Action, string Text = "", string SoundPath = "", bool Enabled = true);
 
 /// <summary>
 /// 定向回复匹配器（纯逻辑，Core 单测）。规则按传入顺序（= 控制窗里从上往下）匹配，
@@ -18,6 +19,7 @@ public static class ReplyRuleMatcher
     {
         foreach (var r in rules)
         {
+            if (!r.Enabled) continue;   // 被禁用的规则不参与匹配（临时关闭，配置保留）
             if (string.IsNullOrWhiteSpace(r.Keyword) || !HasPayload(r)) continue;
             if (message.Contains(r.Keyword, StringComparison.OrdinalIgnoreCase))
                 return r;

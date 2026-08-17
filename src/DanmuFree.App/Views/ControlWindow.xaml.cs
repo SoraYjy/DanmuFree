@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Media;
 using DanmuFree.App.ViewModels;
 using Microsoft.Win32;
@@ -88,5 +89,41 @@ public partial class ControlWindow : Window
         if ((sender as FrameworkElement)?.DataContext is not ViewModels.ReplyRuleViewModel rule) return;
         var dlg = new OpenFileDialog { Filter = "音频文件 (*.wav;*.mp3)|*.wav;*.mp3|所有文件|*.*" };
         if (dlg.ShowDialog() == true) rule.SoundPath = dlg.FileName;
+    }
+
+    // ── 描边色：色块按钮点开 Win32 颜色盘（System.Windows.Forms.ColorDialog，FullOpen=自带光谱）──
+
+    private void OnPickDanmuOutlineColor(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is ViewModels.DanmuViewModel vm)
+            vm.DanmuOutlineColor = PickColor(vm.DanmuOutlineColor);
+    }
+
+    private void OnPickNotifyOutlineColor(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is ViewModels.DanmuViewModel vm)
+            vm.NotifyOutlineColor = PickColor(vm.NotifyOutlineColor);
+    }
+
+    /// <summary>打开颜色盘选色；取消/失败返回原值。</summary>
+    private string PickColor(string currentText)
+    {
+        var current = Colors.Black;
+        try { current = (Color)ColorConverter.ConvertFromString(currentText); }
+        catch (FormatException) { }
+        using var dlg = new System.Windows.Forms.ColorDialog
+        {
+            FullOpen = true,
+            Color = System.Drawing.Color.FromArgb(current.A, current.R, current.G, current.B),
+        };
+        return dlg.ShowDialog(new WpfWindowHandle(this)) == System.Windows.Forms.DialogResult.OK
+            ? $"#{dlg.Color.A:X2}{dlg.Color.R:X2}{dlg.Color.G:X2}{dlg.Color.B:X2}"
+            : currentText;
+    }
+
+    // 把 WPF 窗口句柄包给 WinForms 对话框作 owner（保持在主窗前）。
+    private sealed class WpfWindowHandle(Window window) : System.Windows.Forms.IWin32Window
+    {
+        public IntPtr Handle => new WindowInteropHelper(window).Handle;
     }
 }
