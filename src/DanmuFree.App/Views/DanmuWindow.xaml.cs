@@ -84,22 +84,28 @@ public partial class DanmuWindow : Window
         if (_vm.ShowNotifyWindow) _notify?.Show();
         else if (_notify?.IsVisible == true) _notify?.Hide(); // 未显示过的窗别 Hide，避免异常 / 存进假几何
     }
+    private ScrollViewer? _scroll;   // 缓存列表内部 ScrollViewer（模板固定，只找一次）
+    private bool _scrollQueued;      // 已有滚动在队列 → 后续 Add 合并进那一次（高弹幕量防 UI 刷爆）
+
     private void OnCollectionChanged(object? s, NotifyCollectionChangedEventArgs e)
     {
         if (e.Action != NotifyCollectionChangedAction.Add) return;
+        // 每条 Add 各排一次滚动会在高弹幕量刷爆 UI 线程（每次 UpdateLayout=全窗强制布局），
+        // 一批 50 条 = 50 次全窗布局 + 50 次可视树遍历 → 泵饿死 → Channel DropOldest 丢弹幕。合并成每帧一次。
+        if (_scrollQueued) return;
+        _scrollQueued = true;
+        Dispatcher.BeginInvoke(new Action(() => { _scrollQueued = false; ScrollListToBottom(); }), DispatcherPriority.Render);
         // 悬浮（沉浸）时 ListBox 不可命中、滚动条隐藏，BringIntoView/ContainerFromIndex 不可靠，
         // 新弹幕进来视图不滚到底会“卡住”。改为直接把内部 ScrollViewer 滚到底：
         // 不依赖命中测试 / 滚动条可见性 / 容器是否已生成。Render 优先级 = 布局完成后执行。
-        Dispatcher.BeginInvoke(new Action(ScrollListToBottom), DispatcherPriority.Render);
     }
 
     private void ScrollListToBottom()
     {
-        if (FindScrollViewer(MessageList) is { } sv)
-        {
-            sv.UpdateLayout();
-            sv.ScrollToBottom();
-        }
+        var sv = _scroll ??= FindScrollViewer(MessageList);
+        if (sv is null) return;
+        sv.UpdateLayout();
+        sv.ScrollToBottom();
     }
 
     private static ScrollViewer? FindScrollViewer(DependencyObject d)

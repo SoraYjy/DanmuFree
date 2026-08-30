@@ -118,6 +118,12 @@
                   <TextBlock Text="历史条数" VerticalAlignment="Center" Width="72"/>
                   <TextBox Text="{Binding MaxMessages, UpdateSourceTrigger=PropertyChanged}" Width="100" VerticalAlignment="Center"/>
                 </StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,4">
+                  <TextBlock Text="保留秒数" VerticalAlignment="Center" Width="72"/>
+                  <TextBox Text="{Binding DanmuExpireSeconds, UpdateSourceTrigger=PropertyChanged}" Width="100" VerticalAlignment="Center"
+                           ToolTip="弹幕出现多少秒后自动消失（不再停在窗口里）；0 = 永久保留，只按「历史条数」截断"/>
+                </StackPanel>
+                <TextBlock Text="保留秒数设 0 = 不自动消失；两窗各自独立设置" Foreground="#FF888888" FontSize="11" Margin="0,0,0,6"/>
                 <CheckBox Content="显示账号信息" IsChecked="{Binding ShowUserInfo}" Foreground="#FFCCCCCC" Margin="0,4"/>
                 <CheckBox Content="显示勋章" IsChecked="{Binding ShowMedal}" Foreground="#FFCCCCCC" Margin="0,4"/>
                 <CheckBox Content="显示时间" IsChecked="{Binding ShowTime}" Foreground="#FFCCCCCC" Margin="0,4"/>
@@ -162,7 +168,7 @@
               <CheckBox Content="接收关注" IsChecked="{Binding ShowFollow}" Foreground="#FFCCCCCC" Margin="0,2"
                         ToolTip="关闭后不再显示「关注了主播」"/>
               <CheckBox Content="接收礼物" IsChecked="{Binding ShowGift}" Foreground="#FFCCCCCC" Margin="0,2"
-                        ToolTip="礼物与进场/关注一起显示在本窗口（主弹幕窗不再显示礼物）"/>
+                        ToolTip="礼物/舰长与进场/关注一起显示在本窗口（主弹幕窗不再显示礼物）；舰长（GUARD_BUY）也按礼物处理，受此开关控制"/>
               <CheckBox Content="接收SC（醒目留言）" IsChecked="{Binding ShowSuperChat}" Foreground="#FFCCCCCC" Margin="0,2"
                         ToolTip="B站醒目留言与进场/关注/礼物一起显示在本窗口（主弹幕窗不再显示SC）"/>
               <TextBlock Text="可只收进场、关注、礼物、SC 的任意组合（关闭=过滤，不进任何窗）" Foreground="#FF888888" FontSize="11" Margin="0,2,0,6" TextWrapping="Wrap"/>
@@ -173,6 +179,8 @@
 
               <CheckBox Content="悬浮（沉浸置顶 · 鼠标穿透）" IsChecked="{Binding IsNotifyFloating}" Foreground="#FFCCCCCC" Margin="0,2"
                         ToolTip="置顶 + 鼠标完全穿透。退出在此取消勾选"/>
+              <CheckBox Content="显示时间" IsChecked="{Binding NotifyShowTime}" Foreground="#FFCCCCCC" Margin="0,4"
+                        ToolTip="每条消息前显示 HH:mm:ss 时间戳（独立于弹幕窗的时间开关）"/>
 
               <StackPanel Orientation="Horizontal" Margin="0,4">
                 <TextBlock Text="背景透明度" VerticalAlignment="Center" Width="72"/>
@@ -200,6 +208,11 @@
               <StackPanel Orientation="Horizontal" Margin="0,4">
                 <TextBlock Text="字体" VerticalAlignment="Center" Width="72"/>
                 <ComboBox ItemsSource="{Binding SystemFonts}" SelectedItem="{Binding NotifyFontFamily}" Width="220" VerticalAlignment="Center"/>
+              </StackPanel>
+              <StackPanel Orientation="Horizontal" Margin="0,4">
+                <TextBlock Text="保留秒数" VerticalAlignment="Center" Width="72"/>
+                <TextBox Text="{Binding NotifyExpireSeconds, UpdateSourceTrigger=PropertyChanged}" Width="100" VerticalAlignment="Center"
+                         ToolTip="进场/关注/礼物/SC 出现多少秒后自动消失；0 = 永久保留（独立于弹幕窗的保留秒数）"/>
               </StackPanel>
               <TextBlock Text="进场/关注是独立窗口，可单独拖动、调节大小；悬浮后窗口鼠标穿透、不可点，取消上方勾选退出" Foreground="#FF888888" FontSize="11" Margin="0,8,0,6" TextWrapping="Wrap"/>
             </StackPanel>
@@ -318,6 +331,8 @@
             </TabItem.Resources>
             <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
               <StackPanel Margin="6">
+                <CheckBox Content="启用定向回复" IsChecked="{Binding ReplyRulesEnabled}" Foreground="#FFCCCCCC" Margin="0,0,0,4"
+                          ToolTip="总开关：关闭后所有规则都不参与匹配（配置保留，随时勾回）。临时停某一条用每行开头的勾选框"/>
                 <TextBlock Text="弹幕命中关键词 → 不读这条弹幕，改念一句指定的话，或播放一段音频（wav/mp3）" TextWrapping="Wrap"/>
                 <TextBlock Text="规则从上往下匹配，前面的命中后不再判断后面的。独立于「读弹幕」开关（可关掉普通弹幕朗读、只留定向回复）；只对弹幕正文生效，礼物/SC/进场不触发" Foreground="#FF888888" FontSize="11" TextWrapping="Wrap" Margin="0,2,0,6"/>
                 <Button Content="＋ 添加规则" Command="{Binding AddReplyRuleCommand}" HorizontalAlignment="Left" Margin="0,0,0,2"/>

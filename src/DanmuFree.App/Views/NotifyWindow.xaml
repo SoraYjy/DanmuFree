@@ -13,7 +13,8 @@
         ShowInTaskbar="True">
   <Window.Resources>
     <c:OpacityToBackgroundConverter x:Key="OpacityToBg"/>
-    <!-- 进场 / 关注 / 礼物 单行模板：昵称(金) + 动作(柔色) / 礼物(金色加粗，在 Extra)。字体/字号绑通知窗独立设置。 -->
+    <c:TimeIfShownConverter x:Key="TimeIfShown"/>
+    <!-- 进场 / 关注 / 礼物 单行模板：时间戳(灰) + 昵称(金) + 动作(柔色) / 礼物(金色加粗，在 Extra)。字体/字号绑通知窗独立设置。 -->
     <DataTemplate DataType="{x:Type m:RichMessage}">
       <controls:OutlineHost
           Stroke="{Binding DataContext.NotifyOutlineColor, RelativeSource={RelativeSource AncestorType=Window}}"
@@ -22,6 +23,14 @@
                    Foreground="#FFB0BEC5"
                    FontFamily="{Binding DataContext.NotifyFontFamily, RelativeSource={RelativeSource AncestorType=Window}}"
                    FontSize="{Binding DataContext.NotifyFontSize, RelativeSource={RelativeSource AncestorType=Window}}">
+          <Run Foreground="#FF888888">
+            <Run.Text>
+              <MultiBinding Converter="{StaticResource TimeIfShown}">
+                <Binding Path="Time"/>
+                <Binding Path="DataContext.NotifyShowTime" RelativeSource="{RelativeSource AncestorType=Window}"/>
+              </MultiBinding>
+            </Run.Text>
+          </Run>
           <Run Text="{Binding UserName}" Foreground="#FFFFD54F"/><Run Text=" "/><Run Text="{Binding Text}"/><Run Text="{Binding Extra}" Foreground="#FFFFD54F" FontWeight="Bold"/>
         </TextBlock>
       </controls:OutlineHost>

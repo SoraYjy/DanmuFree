@@ -16,7 +16,7 @@ public static class TtsTextBuilder
         string? raw = m.Type switch
         {
             MessageType.Danmu     => flags.Danmu ? Combine(m.UserName, m.Text, flags.ReadUserName) : null,
-            MessageType.SuperChat => flags.SuperChat ? Combine(m.UserName, m.Text, flags.ReadUserName) : null,
+            MessageType.SuperChat => flags.SuperChat ? BuildSuperChat(m) : null,
             _ => null, // Gift 走聚合器（EnqueueForTts 分流）；Interact / OnlineCount 不读
         };
         if (string.IsNullOrWhiteSpace(raw)) return null;
@@ -32,5 +32,15 @@ public static class TtsTextBuilder
         if (string.IsNullOrWhiteSpace(text)) return "";
         if (!readUser || string.IsNullOrWhiteSpace(user)) return text;
         return $"{user} 说，{text}";
+    }
+
+    /// <summary>SC 朗读文本（事件型，与礼物一致恒带用户名）：「xx 送了 30 元的 SC，内容」。
+    /// 价格来自 Extra（「¥30」→「30 元的」），缺价格则「xx 送了 SC，内容」；空正文返回 ""（不读）。</summary>
+    private static string BuildSuperChat(RichMessage m)
+    {
+        if (string.IsNullOrWhiteSpace(m.Text)) return "";
+        var price = m.Extra is { Length: > 1 } && m.Extra[0] == '¥' ? $"{m.Extra[1..]} 元的 " : "";
+        var who = string.IsNullOrWhiteSpace(m.UserName) ? "" : $"{m.UserName} 送了 ";
+        return $"{who}{price}SC，{m.Text}";
     }
 }

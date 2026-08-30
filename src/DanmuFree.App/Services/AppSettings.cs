@@ -21,6 +21,10 @@ public sealed class AppSettings
     public string FontFamily { get; set; } = "Consolas";
     public double FontSize { get; set; } = 13;
 
+    // 消息自动消失（TTL 秒，0 = 不消失只按历史条数截断；弹幕窗/通知窗独立）
+    public int DanmuExpireSeconds { get; set; } = 0;
+    public int NotifyExpireSeconds { get; set; } = 0;
+
     // 账号信息开关（显示从 Cookie 解析出的 UID）
     public bool ShowUserInfo { get; set; } = true;
 
@@ -57,6 +61,7 @@ public sealed class AppSettings
     public double NotifyOpacity { get; set; } = 1.0;      // 通知窗背景透明度
     public string? NotifyFontFamily { get; set; } = "Microsoft YaHei UI";
     public double NotifyFontSize { get; set; } = 13;
+    public bool NotifyShowTime { get; set; } = true;     // 通知窗消息时间戳（每条前 HH:mm:ss，独立于弹幕窗 ShowTime）
 
     // 两窗几何（位置 + 大小），null=未保存，用默认值。加载时做屏内夹取，避免落到已断开的显示器。
     public double? MainLeft { get; set; }
@@ -94,6 +99,7 @@ public sealed class AppSettings
     public string? TtsBlockedWords { get; set; } = "";
 
     // 定向回复规则（弹幕命中关键词 → 不读原文，改念文字/播音频；从上往下首条命中即停）。
+    public bool ReplyRulesEnabled { get; set; } = true;   // 总开关（旧 settings.json 无此字段 → 默认开，兼容）
     public List<ReplyRuleConfig> ReplyRules { get; set; } = new();
 }
 

@@ -34,20 +34,25 @@ public partial class NotifyWindow : Window
         WindowClickThrough.SetPassThrough(this, _vm.IsNotifyFloating);
     }
 
+    private System.Windows.Controls.ScrollViewer? _scroll;   // 缓存列表内部 ScrollViewer（只找一次）
+    private bool _scrollQueued;      // 已有滚动在队列 → 后续 Add 合并进那一次（高弹幕量防 UI 刷爆）
+
     private void OnCollectionChanged(object? s, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
     {
         if (e.Action != System.Collections.Specialized.NotifyCollectionChangedAction.Add) return;
-        // 沉浸下命中测试关闭、滚动条透明，依赖 ScrollToBottom（与主弹幕窗同款）。
-        Dispatcher.BeginInvoke(new Action(ScrollListToBottom), DispatcherPriority.Render);
+        // 每条 Add 各排一次滚动会在高频事件（进场/礼物刷屏）刷爆 UI 线程，合并成每帧一次（详见 DanmuWindow 同款）。
+        // 沉浸下命中测试关闭、滚动条透明，依赖 ScrollToBottom。
+        if (_scrollQueued) return;
+        _scrollQueued = true;
+        Dispatcher.BeginInvoke(new Action(() => { _scrollQueued = false; ScrollListToBottom(); }), DispatcherPriority.Render);
     }
 
     private void ScrollListToBottom()
     {
-        if (FindScrollViewer(NotifyList) is { } sv)
-        {
-            sv.UpdateLayout();
-            sv.ScrollToBottom();
-        }
+        var sv = _scroll ??= FindScrollViewer(NotifyList);
+        if (sv is null) return;
+        sv.UpdateLayout();
+        sv.ScrollToBottom();
     }
 
     private static ScrollViewer? FindScrollViewer(DependencyObject d)

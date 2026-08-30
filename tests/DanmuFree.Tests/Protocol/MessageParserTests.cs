@@ -62,6 +62,26 @@ public class MessageParserTests
     }
 
     [Fact]
+    public void Guard_buy_parses_as_gift_with_count()
+    {
+        // GUARD_BUY（上舰/续费：舰长/提督/总督）按礼物路由。字段名与 SEND_GIFT 不同：username / gift_name。
+        var json = """{"cmd":"GUARD_BUY","data":{"uid":208259,"username":"神明X","guard_level":3,"num":1,"price":198000,"gift_id":10003,"gift_name":"舰长"}}""";
+        var m = _parser.Parse(Op5(json))!;
+        Assert.Equal(MessageType.Gift, m.Type);
+        Assert.Equal("神明X", m.UserName);
+        Assert.Equal("舰长 x1", m.Extra);
+    }
+
+    [Fact]
+    public void Guard_buy_renewal_months_in_count()
+    {
+        var json = """{"cmd":"GUARD_BUY","data":{"username":"bob","guard_level":2,"num":3,"gift_name":"提督"}}""";
+        var m = _parser.Parse(Op5(json))!;
+        Assert.Equal("bob", m.UserName);
+        Assert.Equal("提督 x3", m.Extra);
+    }
+
+    [Fact]
     public void Interact_word_enter_room()
     {
         var json = """{"cmd":"INTERACT_WORD","data":{"type":1,"uname":"carol"}}""";

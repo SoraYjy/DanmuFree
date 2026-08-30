@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Net.Http;
 using System.Windows;
+using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DanmuFree.App.Services;
@@ -21,6 +22,8 @@ public partial class DanmuViewModel : ViewModelBase
     private DouyinSigner? _douyinSigner;   // node 签名 sidecar（懒构造，抖音连接时才用）
     private UiBatchPump? _pump;
     private UiBatchPump? _notifyPump;
+    // 1s 常开 tick：TTL 裁剪（消息按到达序追加，过期必为前缀，从头批量删）+ UI 泵丢弃计数落日志。成本≈0。
+    private readonly DispatcherTimer _expireTimer = new() { Interval = TimeSpan.FromSeconds(1) };
     private StatsService? _stats;
     private CancellationTokenSource? _cts;
     private ITtsClient? _ttsClient;
@@ -37,6 +40,9 @@ public partial class DanmuViewModel : ViewModelBase
     public ObservableCollection<ReplyRuleViewModel> ReplyRules { get; } = new();
     // 收包线程（WS 回调里匹配）与 UI 线程（增删/上移/下移）共用一把锁，防枚举中途集合被改。
     private readonly object _replyLock = new();
+
+    // 定向回复总开关：关 = 全部规则不参与匹配（配置保留；单条临时禁用用行首勾选框）。
+    [ObservableProperty] private bool _replyRulesEnabled = true;
 
     // 系统字体名（供设置面板下拉）
     public string[] SystemFonts { get; } =
@@ -67,6 +73,10 @@ public partial class DanmuViewModel : ViewModelBase
     [ObservableProperty] private string _fontFamily = "Consolas";
     [ObservableProperty] private double _fontSize = 13;
     [ObservableProperty] private int _maxMessages = 1000;
+
+    // 消息自动消失（出现多少秒后从窗里移除；0 = 永久保留，只按历史条数截断）
+    [ObservableProperty] private int _danmuExpireSeconds;
+    [ObservableProperty] private int _notifyExpireSeconds;
 
     // 模式开关
     [ObservableProperty] private bool _isFloating;
@@ -102,6 +112,8 @@ public partial class DanmuViewModel : ViewModelBase
     [ObservableProperty] private double _notifyOpacity = 1.0;
     [ObservableProperty] private string _notifyFontFamily = "Microsoft YaHei UI";
     [ObservableProperty] private double _notifyFontSize = 13;
+    // 通知窗消息时间戳（每条前 HH:mm:ss，独立于弹幕窗 ShowTime）
+    [ObservableProperty] private bool _notifyShowTime = true;
 
     // 文字描边（通知窗）：独立于弹幕窗描边设置
     [ObservableProperty] private bool _notifyOutline;
@@ -159,6 +171,8 @@ public partial class DanmuViewModel : ViewModelBase
         FontFamily = string.IsNullOrEmpty(s.FontFamily) ? "Consolas" : s.FontFamily;
         FontSize = s.FontSize;
         MaxMessages = s.MaxMessages;
+        DanmuExpireSeconds = s.DanmuExpireSeconds;
+        NotifyExpireSeconds = s.NotifyExpireSeconds;
         ShowUserInfo = s.ShowUserInfo;
         ShowMedal = s.ShowMedal;
         ShowTime = s.ShowTime;
@@ -180,6 +194,7 @@ public partial class DanmuViewModel : ViewModelBase
         NotifyOpacity = s.NotifyOpacity;
         NotifyFontFamily = string.IsNullOrEmpty(s.NotifyFontFamily) ? "Microsoft YaHei UI" : s.NotifyFontFamily;
         NotifyFontSize = s.NotifyFontSize;
+        NotifyShowTime = s.NotifyShowTime;
         NotifyOutline = s.NotifyOutline;
         NotifyOutlineColor = string.IsNullOrEmpty(s.NotifyOutlineColor) ? "#FF000000" : s.NotifyOutlineColor;
         NotifyOutlineThickness = s.NotifyOutlineThickness;
@@ -214,11 +229,15 @@ public partial class DanmuViewModel : ViewModelBase
                 SoundPath = r.SoundPath,
                 Enabled = r.Enabled,
             });
+        ReplyRulesEnabled = s.ReplyRulesEnabled;
         // 枚举系统内置引擎可选音色（一次性；与设置无关）。
         if (SystemVoices.Count == 0)
             foreach (var name in SystemSpeechTtsClient.ListVoiceNames())
                 SystemVoices.Add(name);
         TtsEnabled = s.TtsEnabled;
+        // 1s 常开：TTL 两个都关也跑（列表空时是空操作），顺带把 UI 泵丢弃计数落日志。
+        _expireTimer.Tick += (_, _) => OnSecondTick();
+        _expireTimer.Start();
         RefreshUserInfo();
     }
 
@@ -255,6 +274,47 @@ public partial class DanmuViewModel : ViewModelBase
     partial void OnDanmuOutlineThicknessChanged(double value) => OnPropertyChanged(nameof(DanmuOutlineDepth));
     partial void OnNotifyOutlineChanged(bool value) => OnPropertyChanged(nameof(NotifyOutlineDepth));
     partial void OnNotifyOutlineThicknessChanged(double value) => OnPropertyChanged(nameof(NotifyOutlineDepth));
+
+    // —— 消息自动消失（TTL）+ UI 泵丢弃取证 ——
+
+    private void OnSecondTick()
+    {
+        TrimExpired();
+        LogUiDrops();
+    }
+
+    // 丢弃可见化：UiBatchPump 的 Channel(2000, DropOldest) 丢过东西就落日志（30s 节流）。
+    // 日志有数 = 本端 UI 跟不上真丢过；恒为 0 却仍缺弹幕 = 服务端就没推（采样/限流），与本端无关。
+    private long _lastLoggedDrops;
+    private DateTime _lastDropLogAt = DateTime.MinValue;
+
+    private void LogUiDrops()
+    {
+        long total = (_pump?.DroppedCount ?? 0) + (_notifyPump?.DroppedCount ?? 0);
+        if (total <= _lastLoggedDrops) return;   // 无新增（或重连后计数归零）不记
+        var now = DateTime.Now;
+        if ((now - _lastDropLogAt).TotalSeconds < 30) return;
+        _log.Error($"UI 泵丢弃 {total - _lastLoggedDrops} 条（累计 {total}）：UI 刷新跟不上，已丢最旧消息");
+        _lastLoggedDrops = total;
+        _lastDropLogAt = now;
+    }
+
+    // UI 线程（DispatcherTimer 回调）：过期消息必为集合前缀（按到达序追加），数出条数再从头删。
+    private void TrimExpired()
+    {
+        if (DanmuExpireSeconds <= 0 && NotifyExpireSeconds <= 0) return;
+        var now = DateTime.Now;
+        if (DanmuExpireSeconds > 0) TrimPrefix(Messages, now, DanmuExpireSeconds);
+        if (NotifyExpireSeconds > 0) TrimPrefix(NotifyMessages, now, NotifyExpireSeconds);
+    }
+
+    private static void TrimPrefix(ObservableCollection<RichMessage> list, DateTime now, int ttl)
+    {
+        var cutoff = now.AddSeconds(-ttl);
+        int k = 0;
+        while (k < list.Count && list[k].Time <= cutoff) k++;
+        for (int i = 0; i < k; i++) list.RemoveAt(0);
+    }
 
     private void RefreshUserInfo()
     {
@@ -339,12 +399,12 @@ public partial class DanmuViewModel : ViewModelBase
         //          由通知窗模板渲染）；各自开关；不再进主弹幕流（主弹幕流只剩纯聊天 Danmu）。
         if (m.Type == MessageType.Gift)
         {
-            if (ShowGift) _notifyPump?.Writer.TryWrite(m);
+            if (ShowGift) _notifyPump?.TryWrite(m);
             return;
         }
         if (m.Type == MessageType.SuperChat)
         {
-            if (ShowSuperChat) _notifyPump?.Writer.TryWrite(m);
+            if (ShowSuperChat) _notifyPump?.TryWrite(m);
             return;
         }
         // 进场 / 关注：单独路由到通知窗集合；进场/关注可分别开关（按动作 Text 判定，Text 由解析器固定产出）。
@@ -357,11 +417,11 @@ public partial class DanmuViewModel : ViewModelBase
                 _             => ShowEntry,                // "进入直播间" 及其它
             };
             if (!allow) return;
-            _notifyPump?.Writer.TryWrite(m);
+            _notifyPump?.TryWrite(m);
             return;
         }
         if (!ShowMedal && m.Medal is not null) m = m with { Medal = null };
-        _pump?.Writer.TryWrite(m);
+        _pump?.TryWrite(m);
     }
 
     private void OnStatsUpdated(RoomStats s)
@@ -407,6 +467,8 @@ public partial class DanmuViewModel : ViewModelBase
             Platform = Platform.ToString(),
             DouyinRoomId = DouyinRoomId,
             MaxMessages = MaxMessages,
+            DanmuExpireSeconds = DanmuExpireSeconds,
+            NotifyExpireSeconds = NotifyExpireSeconds,
             Topmost = Topmost,
             IsFloating = IsFloating,
             Opacity = Opacity,
@@ -434,6 +496,7 @@ public partial class DanmuViewModel : ViewModelBase
             NotifyOutline = NotifyOutline,
             NotifyOutlineColor = NotifyOutlineColor,
             NotifyOutlineThickness = NotifyOutlineThickness,
+            NotifyShowTime = NotifyShowTime,
             MainLeft = MainLeft, MainTop = MainTop, MainWidth = MainWidth, MainHeight = MainHeight,
             NotifyLeft = NotifyLeft, NotifyTop = NotifyTop, NotifyWidth = NotifyWidth, NotifyHeight = NotifyHeight,
             ControlLeft = ControlLeft, ControlTop = ControlTop, ControlWidth = ControlWidth, ControlHeight = ControlHeight,
@@ -454,6 +517,7 @@ public partial class DanmuViewModel : ViewModelBase
             TtsMaxLength = TtsMaxLength,
             TtsQueueCapacity = TtsQueueCapacity,
             TtsBlockedWords = TtsBlockedWords,
+            ReplyRulesEnabled = ReplyRulesEnabled,
             ReplyRules = ReplyRules.Select(r => new ReplyRuleConfig
             {
                 Keyword = r.Keyword, Action = r.Action, Text = r.Text, SoundPath = r.SoundPath, Enabled = r.Enabled,
@@ -539,7 +603,7 @@ public partial class DanmuViewModel : ViewModelBase
         // 定向回复：Danmu 正文命中关键词 → 不读原弹幕，改念指定文字 / 播指定音频（首条命中即停）。
         // 独立于「读弹幕」开关（可关掉普通弹幕朗读、只留定向回复）；回复原样播报，
         // 不走屏蔽词/字数上限/读用户名（用户显式配置的内容，不该被再过滤）。
-        if (m.Type == MessageType.Danmu && ReplyRules.Count > 0)
+        if (ReplyRulesEnabled && m.Type == MessageType.Danmu && ReplyRules.Count > 0)
         {
             ReplyRule? hit;
             lock (_replyLock)

@@ -75,6 +75,17 @@ public sealed class MessageParser
                     $"{d.GetProperty("giftName").GetString()} x{d.GetProperty("num").GetInt32()}",
                     now);
             }
+            case "GUARD_BUY":
+            {
+                // 上舰/续费（舰长/提督/总督）按礼物路由：显示进通知窗、朗读走礼物聚合器（「xx 送了 舰长」）。
+                // 字段名与 SEND_GIFT 不同：username / gift_name（num=购买/续费月数，通常 1）。
+                var d = root.GetProperty("data");
+                return new RichMessage(MessageType.Gift,
+                    d.GetProperty("username").GetString() ?? "",
+                    "",
+                    $"{d.GetProperty("gift_name").GetString()} x{d.GetProperty("num").GetInt32()}",
+                    now);
+            }
             case "SUPER_CHAT_MESSAGE":
             {
                 var d = root.GetProperty("data");

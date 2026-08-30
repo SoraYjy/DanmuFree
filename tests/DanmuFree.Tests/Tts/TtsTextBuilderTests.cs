@@ -35,11 +35,20 @@ public class TtsTextBuilderTests
     }
 
     [Fact]
-    public void SuperChat_reads_message()
+    public void SuperChat_announces_sender_and_price()
     {
+        // SC 是事件型：念「xx 送了 N 元的 SC，内容」——用户名/价格必带（价格来自 Extra「¥30」）。
         var t = TtsTextBuilder.Build(Msg(MessageType.SuperChat, "李四", "感谢主播", "¥30"),
             new TtsReadFlags(true, true, true), Array.Empty<string>(), 80);
-        Assert.Equal("李四 说，感谢主播", t);
+        Assert.Equal("李四 送了 30 元的 SC，感谢主播", t);
+    }
+
+    [Fact]
+    public void SuperChat_without_price_still_announces()
+    {
+        var t = TtsTextBuilder.Build(Msg(MessageType.SuperChat, "李四", "感谢主播"),
+            new TtsReadFlags(true, true, true), Array.Empty<string>(), 80);
+        Assert.Equal("李四 送了 SC，感谢主播", t);
     }
 
     [Fact]
@@ -101,11 +110,12 @@ public class TtsTextBuilderTests
     }
 
     [Fact]
-    public void SuperChat_omits_username_when_readUser_off()
+    public void SuperChat_username_read_regardless_of_readUser_flag()
     {
+        // 「读用户名」开关只影响弹幕前缀；SC 恒带用户名（事件型，「谁送的」是语义必需，与礼物一致）。
         var t = TtsTextBuilder.Build(Msg(MessageType.SuperChat, "李四", "感谢主播", "¥30"),
             new TtsReadFlags(true, true, true, ReadUserName: false), Array.Empty<string>(), 80);
-        Assert.Equal("感谢主播", t);
+        Assert.Equal("李四 送了 30 元的 SC，感谢主播", t);
     }
 
     [Fact]
