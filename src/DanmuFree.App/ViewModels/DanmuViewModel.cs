@@ -91,6 +91,9 @@ public partial class DanmuViewModel : ViewModelBase
     // 弹幕时间戳开关
     [ObservableProperty] private bool _showTime = true;
 
+    // 顶部统计条开关（在线/看过/赞，关=整条收起）
+    [ObservableProperty] private bool _showStats = true;
+
     // 用户名 / 弹幕 分开的字体与颜色（可在控制窗配置）
     [ObservableProperty] private string _userNameFontFamily = "Microsoft YaHei UI";
     [ObservableProperty] private string _userNameColor = "#FF69B7FF";
@@ -176,6 +179,7 @@ public partial class DanmuViewModel : ViewModelBase
         ShowUserInfo = s.ShowUserInfo;
         ShowMedal = s.ShowMedal;
         ShowTime = s.ShowTime;
+        ShowStats = s.ShowStats;
         // 字体默认继承全局 FontFamily，颜色给区分色（用户名浅蓝、弹幕白）
         UserNameFontFamily = string.IsNullOrEmpty(s.UserNameFontFamily) ? FontFamily : s.UserNameFontFamily;
         UserNameColor = string.IsNullOrEmpty(s.UserNameColor) ? "#FF69B7FF" : s.UserNameColor;
@@ -477,6 +481,7 @@ public partial class DanmuViewModel : ViewModelBase
             ShowUserInfo = ShowUserInfo,
             ShowMedal = ShowMedal,
             ShowTime = ShowTime,
+            ShowStats = ShowStats,
             UserNameFontFamily = UserNameFontFamily,
             UserNameColor = UserNameColor,
             DanmuFontFamily = DanmuFontFamily,

@@ -82,6 +82,64 @@ public class MessageParserTests
     }
 
     [Fact]
+    public void Send_gift_v2_decodes_pb_gift_list()
+    {
+        // SEND_GIFT_V2（2026-07 灰度的新礼物协议）：礼物编码在 data.pb（base64 protobuf），
+        // 顶层 f2=uname、f10=gift_list[]（重复字段，一帧可带多条），每项 f2=gift_name、f3=num。
+        var m = _parser.Parse(Op5(GiftV2Json(MakeGiftV2Pb("张三", ("人气票", 2)))))!;
+        Assert.Equal(MessageType.Gift, m.Type);
+        Assert.Equal("张三", m.UserName);
+        Assert.Equal("人气票 x2", m.Extra);
+    }
+
+    [Fact]
+    public void Send_gift_v2_batch_gifts_parse_all()
+    {
+        var all = _parser.ParseAll(Op5(GiftV2Json(MakeGiftV2Pb("bob", ("辣条", 10), ("小心心", 3)))));
+        Assert.Equal(2, all.Count);
+        Assert.Equal(MessageType.Gift, all[0].Type);
+        Assert.Equal("bob", all[0].UserName);
+        Assert.Equal("辣条 x10", all[0].Extra);
+        Assert.Equal("小心心 x3", all[1].Extra);
+        // Parse（单条契约）取首条，兼容旧调用。
+        var first = _parser.Parse(Op5(GiftV2Json(MakeGiftV2Pb("bob", ("辣条", 10), ("小心心", 3)))))!;
+        Assert.Equal("辣条 x10", first.Extra);
+    }
+
+    [Fact]
+    public void Send_gift_v2_skips_unrelated_fields()
+    {
+        // pb 里夹着 uid/face/guard_level/勋章/盲盒等未用字段（varint、内嵌 submessage、string），
+        // 解码器须跳过后仍取到 uname 与 gift_list。
+        using var ms = new MemoryStream();
+        WriteVarint(ms, (1u << 3) | 0u); WriteVarint(ms, 12345);          // f1 uid
+        WriteField(ms, 3, Encoding.UTF8.GetBytes("https://face.jpg"));   // f3 face
+        WriteVarint(ms, (5u << 3) | 0u); WriteVarint(ms, 3);             // f5 guard_level
+        using var medal = new MemoryStream();
+        WriteVarint(medal, (5u << 3) | 0u); WriteVarint(medal, 20);      // 勋章 f5 level
+        WriteField(medal, 6, Encoding.UTF8.GetBytes("德云色"));          // 勋章 f6 name
+        WriteField(ms, 8, medal.ToArray());                              // f8 medal_info
+        using var item = new MemoryStream();
+        WriteVarint(item, (1u << 3) | 0u); WriteVarint(item, 31536);     // item f1 gift_id
+        WriteField(item, 2, Encoding.UTF8.GetBytes("人气票"));          // item f2 gift_name
+        WriteVarint(item, (3u << 3) | 0u); WriteVarint(item, 1);         // item f3 num
+        WriteField(item, 35, Encoding.UTF8.GetBytes("img"));             // item f35 gift_info
+        WriteField(ms, 10, item.ToArray());                              // f10 gift_list
+        WriteField(ms, 2, Encoding.UTF8.GetBytes("carol"));              // f2 uname
+
+        var m = _parser.Parse(Op5(GiftV2Json(Convert.ToBase64String(ms.ToArray()))))!;
+        Assert.Equal("carol", m.UserName);
+        Assert.Equal("人气票 x1", m.Extra);
+    }
+
+    [Fact]
+    public void Send_gift_v2_without_pb_yields_nothing()
+    {
+        Assert.Null(_parser.Parse(Op5("""{"cmd":"SEND_GIFT_V2","data":{"dmscore":5}}""")));
+        Assert.Empty(_parser.ParseAll(Op5("""{"cmd":"SEND_GIFT_V2","data":{}}""")));
+    }
+
+    [Fact]
     public void Interact_word_enter_room()
     {
         var json = """{"cmd":"INTERACT_WORD","data":{"type":1,"uname":"carol"}}""";
@@ -166,6 +224,24 @@ public class MessageParserTests
         $"{{\"cmd\":\"INTERACT_WORD_V2\",\"data\":{{\"pb\":\"{pb}\"}}}}";
     static string V2JsonSuffix(string pb) =>
         $"{{\"cmd\":\"INTERACT_WORD_V2@123\",\"data\":{{\"pb\":\"{pb}\"}}}}";
+
+    // 构造 SEND_GIFT_V2 的 data.pb：顶层 f2=uname(string)、f10=gift_list[]，每项 f2=gift_name、f3=num。
+    static string MakeGiftV2Pb(string uname, params (string Name, int Num)[] gifts)
+    {
+        using var ms = new MemoryStream();
+        WriteField(ms, 2, Encoding.UTF8.GetBytes(uname));                // f2 uname
+        foreach (var (name, num) in gifts)
+        {
+            using var item = new MemoryStream();
+            WriteField(item, 2, Encoding.UTF8.GetBytes(name));           // item f2 gift_name
+            WriteVarint(item, (3u << 3) | 0u);                           // item f3 key
+            WriteVarint(item, (ulong)num);                               // item f3 num
+            WriteField(ms, 10, item.ToArray());                          // f10 gift_list[]
+        }
+        return Convert.ToBase64String(ms.ToArray());
+    }
+    static string GiftV2Json(string pb) =>
+        $"{{\"cmd\":\"SEND_GIFT_V2\",\"data\":{{\"pb\":\"{pb}\"}}}}";
     static void WriteField(Stream ms, uint field, byte[] data)
     {
         WriteVarint(ms, (field << 3) | 2u);

@@ -122,7 +122,9 @@ public sealed class BilibiliDanmuClient
             var packets = _decoder.Decode(acc.GetBuffer().AsMemory(0, (int)acc.Length), out var rem);
             foreach (var p in packets)
             {
-                if (_parser.Parse(p) is { } msg) MessageReceived?.Invoke(msg);
+                // ParseAll：一帧可产出多条（SEND_GIFT_V2 的 gift_list 重复字段）。
+                foreach (var msg in _parser.ParseAll(p))
+                    MessageReceived?.Invoke(msg);
             }
             acc.SetLength(0);
             if (!rem.IsEmpty) acc.Write(rem.Span); // 保留半包

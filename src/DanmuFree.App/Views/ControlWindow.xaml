@@ -127,6 +127,8 @@
                 <CheckBox Content="显示账号信息" IsChecked="{Binding ShowUserInfo}" Foreground="#FFCCCCCC" Margin="0,4"/>
                 <CheckBox Content="显示勋章" IsChecked="{Binding ShowMedal}" Foreground="#FFCCCCCC" Margin="0,4"/>
                 <CheckBox Content="显示时间" IsChecked="{Binding ShowTime}" Foreground="#FFCCCCCC" Margin="0,4"/>
+                <CheckBox Content="显示在线/看过/赞" IsChecked="{Binding ShowStats}" Foreground="#FFCCCCCC" Margin="0,4"
+                          ToolTip="弹幕窗顶部统计条；关闭后整条收起、弹幕区占满全窗"/>
 
                 <!-- 用户名 / 弹幕 文本样式（字体 + 颜色，各自独立可配） -->
                 <TextBlock Text="用户名样式" Foreground="#FFAAAAAA" Margin="0,8,0,2"/>

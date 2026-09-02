@@ -34,6 +34,9 @@ public sealed class AppSettings
     // 弹幕时间戳开关
     public bool ShowTime { get; set; } = true;
 
+    // 顶部统计条开关（在线/看过/赞）
+    public bool ShowStats { get; set; } = true;
+
     // 用户名 / 弹幕 分开的字体与颜色（控制窗可配置）
     public string? UserNameFontFamily { get; set; }
     public string? UserNameColor { get; set; }

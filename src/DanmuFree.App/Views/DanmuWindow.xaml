@@ -41,12 +41,15 @@
         </TextBlock>
       </controls:OutlineHost>
     </DataTemplate>
-    <!-- 悬浮时变淡 + 鼠标穿透（统计条：悬浮时也显示，只更透、不挡操作） -->
+    <!-- 统计条样式：悬浮时变淡 + 鼠标穿透（悬浮时也显示，只更透、不挡操作）；ShowStats 关时整条收起 -->
     <Style x:Key="DimWhenFloating" TargetType="FrameworkElement">
       <Style.Triggers>
         <DataTrigger Binding="{Binding IsFloating}" Value="True">
           <Setter Property="Opacity" Value="0.4"/>
           <Setter Property="IsHitTestVisible" Value="False"/>
+        </DataTrigger>
+        <DataTrigger Binding="{Binding ShowStats}" Value="False">
+          <Setter Property="Visibility" Value="Collapsed"/>
         </DataTrigger>
       </Style.Triggers>
     </Style>
