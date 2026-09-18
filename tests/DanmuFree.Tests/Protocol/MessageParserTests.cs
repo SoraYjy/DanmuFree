@@ -274,6 +274,35 @@ public class MessageParserTests
         Assert.Equal("999", m.Extra);
     }
 
+    // B站真实在线人数：WS 实时推送（每 2~5s，实测 7777，与 queryContributionRank 的 count 同源）。
+    // 注意与 op3 / ONLINE_GUEST_COUNT 的 OnlineCount（人气口径、不可靠）区分：走独立枚举。
+    [Fact]
+    public void Online_rank_count_cmd_yields_real_online()
+    {
+        var json = """{"cmd":"ONLINE_RANK_COUNT","data":{"count":3544,"count_text":"3544","online_count":3544,"online_count_text":"3544"}}""";
+        var m = _parser.Parse(Op5(json))!;
+        Assert.Equal(MessageType.RealOnlineCount, m.Type);
+        Assert.Equal("3544", m.Extra);
+    }
+
+    [Fact]
+    public void Online_rank_count_falls_back_to_online_count_field()
+    {
+        var m = _parser.Parse(Op5("""{"cmd":"ONLINE_RANK_COUNT","data":{"online_count":88}}"""))!;
+        Assert.Equal(MessageType.RealOnlineCount, m.Type);
+        Assert.Equal("88", m.Extra);
+    }
+
+    // 看过累计：WS 实时推送（此前 60s 轮询 getInfoByRoom）。
+    [Fact]
+    public void Watched_change_cmd_yields_watched_count()
+    {
+        var json = """{"cmd":"WATCHED_CHANGE","data":{"num":101989,"text_small":"10.1万","text_large":"10.1万人看过"}}""";
+        var m = _parser.Parse(Op5(json))!;
+        Assert.Equal(MessageType.WatchedCount, m.Type);
+        Assert.Equal("101989", m.Extra);
+    }
+
     [Fact]
     public void Unknown_cmd_returns_null_without_throwing()
     {

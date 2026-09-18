@@ -317,6 +317,23 @@
                   <TextBox Text="{Binding TtsBlockedWords, UpdateSourceTrigger=PropertyChanged}" Width="220" VerticalAlignment="Center"
                            ToolTip="逗号分隔，命中任一则不读"/>
                 </StackPanel>
+                <!-- 不念用户（用户名黑名单）：可编辑行列表，一行一个用户名 -->
+                <TextBlock Text="不念用户（这些人的弹幕不朗读，仍正常显示）" Margin="0,8,0,2" TextWrapping="Wrap"/>
+                <Button Content="＋ 添加用户" Command="{Binding AddMutedUserCommand}" HorizontalAlignment="Left" Margin="0,0,0,2"/>
+                <ItemsControl ItemsSource="{Binding MutedUsers}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                      <Border Background="#FF2A2A2A" CornerRadius="3" Padding="6" Margin="0,4,0,0">
+                        <StackPanel Orientation="Horizontal">
+                          <TextBox Text="{Binding UserName, UpdateSourceTrigger=PropertyChanged}" Width="220" VerticalAlignment="Center"
+                                   ToolTip="该用户的弹幕不朗读（仍正常显示；礼物/SC 不受影响，也不触发定向回复）"/>
+                          <Button Content="删" Command="{Binding DataContext.RemoveMutedUserCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                  CommandParameter="{Binding}" Width="30" Margin="8,0,0,0" ToolTip="移除这个用户"/>
+                        </StackPanel>
+                      </Border>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
                 <Button Content="测试朗读" Command="{Binding TestTtsCommand}" Margin="0,6,0,4" HorizontalAlignment="Left"/>
                 <TextBlock Text="Edge 在线：Azure 神经音色，免部署免 key（需联网；非官方端点，偶发失效时切系统内置兜底）。GPT-SoVITS：需本地启动 api（默认 127.0.0.1:9880）+ 3~10 秒参考音频，可克隆音色。系统内置：零配置离线，音色偏机械。切换引擎/音色立即生效；朗读与显示各自独立" Foreground="#FF888888" FontSize="11" Margin="0,2,0,6" TextWrapping="Wrap"/>
               </StackPanel>

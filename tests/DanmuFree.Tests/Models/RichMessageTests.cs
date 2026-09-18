@@ -15,8 +15,9 @@ public class RichMessageTests
     }
 
     [Fact]
-    public void MessageType_has_five_kinds()
+    public void MessageType_has_seven_kinds()
     {
-        Assert.Equal(5, Enum.GetNames<MessageType>().Length);
+        // Danmu/Gift/Interact/SuperChat/OnlineCount + RealOnlineCount/WatchedCount（B站 WS 实时统计推送）。
+        Assert.Equal(7, Enum.GetNames<MessageType>().Length);
     }
 }

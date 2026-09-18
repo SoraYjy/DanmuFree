@@ -141,6 +141,9 @@ public partial class DanmuViewModel : ViewModelBase
     [ObservableProperty] private int _ttsMaxLength = 80;
     [ObservableProperty] private int _ttsQueueCapacity = 5;
     [ObservableProperty] private string? _ttsBlockedWords = "";
+    // 用户名黑名单（朗读 TAB 可编辑列表）：这些用户的弹幕不朗读。行变化重建匹配集合（忽略大小写）。
+    public ObservableCollection<MutedUserViewModel> MutedUsers { get; } = new();
+    private HashSet<string> _mutedUsers = new(StringComparer.OrdinalIgnoreCase);
 
     // 系统内置引擎可选音色（SAPI 枚举，启动时填充；空=系统无可用音色，回落默认）。
     public ObservableCollection<string> SystemVoices { get; } = new();
@@ -223,6 +226,15 @@ public partial class DanmuViewModel : ViewModelBase
         TtsMaxLength = s.TtsMaxLength;
         TtsQueueCapacity = s.TtsQueueCapacity;
         TtsBlockedWords = s.TtsBlockedWords ?? "";
+        // 不念用户黑名单（行模型订阅变更 → 重建匹配集合；存盘时过滤空行）
+        foreach (var u in s.TtsMutedUsers)
+        {
+            if (string.IsNullOrWhiteSpace(u)) continue;
+            var row = new MutedUserViewModel { UserName = u };
+            row.PropertyChanged += (_, _) => RebuildMutedSet();
+            MutedUsers.Add(row);
+        }
+        RebuildMutedSet();
         // 定向回复规则（顺序即匹配优先级，列表顺序原样还原）
         foreach (var r in s.ReplyRules)
             ReplyRules.Add(new ReplyRuleViewModel
@@ -347,6 +359,9 @@ public partial class DanmuViewModel : ViewModelBase
         if (string.IsNullOrWhiteSpace(room)) return;
 
         _cts = new CancellationTokenSource();
+        // 换房间重连：清掉「已收到 WS 真实统计」标记，新房间从轮询值起步、等推送到达后接管。
+        _hasRealOnline = false;
+        _hasRealWatched = false;
         _pump = new UiBatchPump(Messages, MaxMessages);
         _notifyPump = new UiBatchPump(NotifyMessages, MaxMessages);
         _ = _pump.RunAsync(_cts.Token);
@@ -396,7 +411,24 @@ public partial class DanmuViewModel : ViewModelBase
     private void OnMessageReceived(RichMessage m)
     {
         if (m.Type == MessageType.OnlineCount)
-            return; // B站 op3 不可靠（在线由 StatsService 提供）；抖音在线走 StatsUpdated，不进消息流
+            return; // B站 op3 人气口径实测失真（7777 房间心跳恒 1），弃用；抖音在线走 StatsUpdated
+        // B站 WS 实时统计（2026-09）：ONLINE_RANK_COUNT=真实在线人数（每 2~5s 推）、WATCHED_CHANGE=看过累计。
+        // 一旦收到，置 flag——60s 轮询（getInfoByRoom：人气值/看过）不再覆盖对应字段；
+        // 不推这两条的房间（挂机房等）自动回落轮询值。数字在 Extra（与 OnlineCount 契约一致）。
+        if (m.Type == MessageType.RealOnlineCount)
+        {
+            _hasRealOnline = true;
+            if (long.TryParse(m.Extra, out var online))
+                Application.Current.Dispatcher.InvokeAsync(() => OnlineCount = NumberFormatter.Format(online));
+            return;
+        }
+        if (m.Type == MessageType.WatchedCount)
+        {
+            _hasRealWatched = true;
+            if (long.TryParse(m.Extra, out var watched))
+                Application.Current.Dispatcher.InvokeAsync(() => WatchedCount = NumberFormatter.Format(watched));
+            return;
+        }
         // 朗读（独立第三管道，在任何显示路由之前；DropOldest 永不阻塞收弹幕主路径）
         EnqueueForTts(m);
         // 礼物 / SC：与进场/关注同属「事件流」，路由到通知窗（礼物名/SC价格在 Extra，留言在 Text，
@@ -428,12 +460,16 @@ public partial class DanmuViewModel : ViewModelBase
         _pump?.TryWrite(m);
     }
 
+    // B站 WS 是否已推过真实在线/看过（RealOnlineCount/WatchedCount）——置位后 60s 轮询不覆盖对应字段。
+    private bool _hasRealOnline;
+    private bool _hasRealWatched;
+
     private void OnStatsUpdated(RoomStats s)
     {
         Application.Current.Dispatcher.InvokeAsync(() =>
         {
-            OnlineCount = NumberFormatter.Format(s.Online);
-            WatchedCount = NumberFormatter.Format(s.Watched);
+            if (!_hasRealOnline) OnlineCount = NumberFormatter.Format(s.Online);   // 轮询值=人气值，仅作 fallback
+            if (!_hasRealWatched) WatchedCount = NumberFormatter.Format(s.Watched);
             LikesCount = NumberFormatter.Format(s.Likes);
         });
     }
@@ -522,6 +558,7 @@ public partial class DanmuViewModel : ViewModelBase
             TtsMaxLength = TtsMaxLength,
             TtsQueueCapacity = TtsQueueCapacity,
             TtsBlockedWords = TtsBlockedWords,
+            TtsMutedUsers = MutedUsers.Select(m => m.UserName.Trim()).Where(u => u.Length > 0).ToList(),
             ReplyRulesEnabled = ReplyRulesEnabled,
             ReplyRules = ReplyRules.Select(r => new ReplyRuleConfig
             {
@@ -542,6 +579,25 @@ public partial class DanmuViewModel : ViewModelBase
     partial void OnTtsRefAudioPathChanged(string? value) => _ttsSpeaker?.Update(BuildTtsOptions(), TtsVolume);
     partial void OnTtsPromptTextChanged(string? value) => _ttsSpeaker?.Update(BuildTtsOptions(), TtsVolume);
     partial void OnTtsBlockedWordsChanged(string? value) => _giftPump?.UpdateBlocked(ParseBlocked(TtsBlockedWords));
+
+    // —— 不念用户黑名单（行编辑 → 重建匹配集合；加/删命令）——
+
+    // 引用替换：收包线程读到新/旧任一集合都安全（HashSet 只读遍历）。空行忽略。
+    private void RebuildMutedSet() =>
+        _mutedUsers = new HashSet<string>(
+            MutedUsers.Select(m => m.UserName.Trim()).Where(u => u.Length > 0),
+            StringComparer.OrdinalIgnoreCase);
+
+    [RelayCommand]
+    private void AddMutedUser()
+    {
+        var row = new MutedUserViewModel();
+        row.PropertyChanged += (_, _) => RebuildMutedSet();
+        MutedUsers.Add(row);
+    }
+
+    [RelayCommand]
+    private void RemoveMutedUser(MutedUserViewModel row) => MutedUsers.Remove(row);
 
     // 引擎 / 音色 / 服务地址 变更：若朗读中则重建底层 client（换合成器），否则下次启用生效。
     partial void OnTtsEngineChanged(string value) => RestartTtsIfRunning();
@@ -599,6 +655,9 @@ public partial class DanmuViewModel : ViewModelBase
     private void EnqueueForTts(RichMessage m)
     {
         if (!TtsEnabled || _ttsSpeaker is null) return;
+        // 用户名黑名单：这些用户的弹幕一律不念（含定向回复——反正不想听到这个人）；
+        // 只管弹幕朗读，显示照常、礼物/SC 不受影响。
+        if (m.Type == MessageType.Danmu && _mutedUsers.Contains(m.UserName)) return;
         // 礼物走聚合泵（连送合并 + 始终带用户名，不受读用户名开关影响）；Danmu/SC 走 TtsTextBuilder。
         if (m.Type == MessageType.Gift)
         {

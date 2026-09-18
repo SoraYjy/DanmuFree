@@ -62,6 +62,8 @@ public sealed class MessageParser
             "GUARD_BUY" => ParseGuardBuy(root, now),
             "SUPER_CHAT_MESSAGE" => ParseSuperChat(root, now),
             "ONLINE_GUEST_COUNT" => ParseOnlineGuestCount(root, now),
+            "ONLINE_RANK_COUNT" => ParseOnlineRankCount(root, now),
+            "WATCHED_CHANGE" => ParseWatchedChange(root, now),
             _ => null,
         });
     }
@@ -122,6 +124,26 @@ public sealed class MessageParser
         var d = root.GetProperty("data");
         return new RichMessage(MessageType.OnlineCount, "", "当前在线",
             d.GetProperty("online_count").GetInt32().ToString(), now);
+    }
+
+    // B站真实在线人数（2026-09 探针实测 7777）：WS 每 2~5s 推一次，data.count 即真实在线
+    //（与 queryContributionRank?type=online_rank 的 data.count 同源；对照 op3 心跳恒 1、
+    // getInfoByRoom 的 room_info.online=人气值 27 万——两者都不是人数）。缺失时回落 online_count 字段。
+    static RichMessage? ParseOnlineRankCount(JsonElement root, DateTime now)
+    {
+        if (!root.TryGetProperty("data", out var d)) return null;
+        int count = d.TryGetProperty("count", out var c) ? c.GetInt32()
+                  : d.TryGetProperty("online_count", out var oc) ? oc.GetInt32() : -1;
+        if (count < 0) return null;
+        return new RichMessage(MessageType.RealOnlineCount, "", "当前在线", count.ToString(), now);
+    }
+
+    // 看过累计实时推送（此前只能 60s 轮询 getInfoByRoom 的 watched_show.num）。
+    static RichMessage? ParseWatchedChange(JsonElement root, DateTime now)
+    {
+        if (!root.TryGetProperty("data", out var d)) return null;
+        if (!d.TryGetProperty("num", out var n)) return null;
+        return new RichMessage(MessageType.WatchedCount, "", "看过", n.GetInt32().ToString(), now);
     }
 
     // SEND_GIFT_V2：礼物数据编码在 data.pb（base64 protobuf，JSON 里没有 uname/giftName）。
