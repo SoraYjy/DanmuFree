@@ -14,6 +14,10 @@ public sealed class GiftReadAggregator
     private int _count;
     private bool _pending;
 
+    /// <summary>感谢文案模板（空/空白 = 内置默认文案）。占位符 {用户名} {礼物名} {数量}；
+    /// 运行中可换（下层泵 UpdateTemplate 直改），下次组队吐出即生效。</summary>
+    public string? Template { get; set; }
+
     /// <summary>加一条礼物。返回需立即出队的「上一组」文本：
     /// 同组（同用户+同礼物）累加 → null；换组 → 上一组文本（若先前有攒）。</summary>
     public string? Add(string user, string? extra)
@@ -37,7 +41,7 @@ public sealed class GiftReadAggregator
 
     private string FormatCurrent()
     {
-        var text = Format(_user!, _gift!, _count);
+        var text = Format(_user!, _gift!, _count, Template);
         _pending = false;
         _user = null;
         _gift = null;
@@ -45,9 +49,20 @@ public sealed class GiftReadAggregator
         return text;
     }
 
-    /// <summary>礼物朗读文本：始终带用户名。1 个省数量，多个带数量。</summary>
-    public static string Format(string user, string gift, int count) =>
-        count <= 1 ? $"{user} 送了 {gift}" : $"{user} 送了 {count} 个 {gift}";
+    /// <summary>礼物朗读文本。template 空 → 内置默认（始终带用户名，1 个省数量、多个带数量）；
+    /// 有模板 → 填 {用户名}/{礼物名}/{数量} 占位符（{数量}=实际个数，1 也照填，可预期性优先），
+    /// 未认识的占位符原样保留。用户可自定义如「感谢{用户名}送的{礼物名}」。</summary>
+    public static string Format(string user, string gift, int count, string? template = null)
+    {
+        if (string.IsNullOrWhiteSpace(template))
+            return count <= 1 ? $"{user} 送了 {gift}" : $"{user} 送了 {count} 个 {gift}";
+        // 替换顺序 {数量}→{礼物名}→{用户名}（最可控的最后换）：昵称完全用户可控，含占位符字样时
+        // 轮到它那一步已过、原样保留；礼物名半可控，最多被用户名再吃一层。
+        return template
+            .Replace("{数量}", count.ToString())
+            .Replace("{礼物名}", gift)
+            .Replace("{用户名}", user);
+    }
 
     /// <summary>解析 Extra「佛跳墙 x2」→（佛跳墙, 2）；「礼物」→（礼物, 1）；空/无效 → false。</summary>
     public static bool TryParse(string? extra, out string name, out int count)

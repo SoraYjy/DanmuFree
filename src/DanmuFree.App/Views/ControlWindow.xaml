@@ -334,7 +334,25 @@
                     </DataTemplate>
                   </ItemsControl.ItemTemplate>
                 </ItemsControl>
+                <!-- 礼物感谢文案模板：占位符填空，空 = 内置默认「xx 送了 N 个 yy」 -->
+                <TextBlock Text="礼物感谢文案（留空 = 默认「xx 送了 N 个 yy」）" Margin="0,8,0,2" TextWrapping="Wrap"/>
+                <TextBox Text="{Binding TtsGiftTemplate, UpdateSourceTrigger=PropertyChanged}" FontSize="12"
+                         ToolTip="支持占位符：{用户名} {礼物名} {数量}（数量=实际个数）。例：感谢{用户名}送的{礼物名}。改完立即生效（不用重启）"/>
+                <TextBlock Text="占位符：{用户名} {礼物名} {数量}（数量=实际个数）。示例：感谢{用户名}送的{礼物名}。对礼物朗读生效（含舰长）；SC 播报、定向回复不变" Foreground="#FF888888" FontSize="11" Margin="0,2,0,6" TextWrapping="Wrap"/>
                 <Button Content="测试朗读" Command="{Binding TestTtsCommand}" Margin="0,6,0,4" HorizontalAlignment="Left"/>
+                <!-- TTS 健康状态行：60s 心跳 + 真实合成结果（微软服务端故障时红字提示，等恢复即可） -->
+                <TextBlock Text="{Binding TtsHealthText}" FontSize="12" Margin="0,4,0,0" TextWrapping="Wrap">
+                  <TextBlock.Style>
+                    <Style TargetType="TextBlock">
+                      <Setter Property="Foreground" Value="#FF8FD08F"/>
+                      <Style.Triggers>
+                        <DataTrigger Binding="{Binding TtsHealthWarn}" Value="True">
+                          <Setter Property="Foreground" Value="#FFFF7070"/>
+                        </DataTrigger>
+                      </Style.Triggers>
+                    </Style>
+                  </TextBlock.Style>
+                </TextBlock>
                 <TextBlock Text="Edge 在线：Azure 神经音色，免部署免 key（需联网；非官方端点，偶发失效时切系统内置兜底）。GPT-SoVITS：需本地启动 api（默认 127.0.0.1:9880）+ 3~10 秒参考音频，可克隆音色。系统内置：零配置离线，音色偏机械。切换引擎/音色立即生效；朗读与显示各自独立" Foreground="#FF888888" FontSize="11" Margin="0,2,0,6" TextWrapping="Wrap"/>
               </StackPanel>
             </ScrollViewer>

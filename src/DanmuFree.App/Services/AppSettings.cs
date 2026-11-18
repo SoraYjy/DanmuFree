@@ -102,6 +102,9 @@ public sealed class AppSettings
     public string? TtsBlockedWords { get; set; } = "";
     // 用户名黑名单（可编辑列表）：这些用户的弹幕不朗读（显示不受影响；礼物/SC 不受影响）。
     public List<string> TtsMutedUsers { get; set; } = new();
+    // 礼物感谢文案模板：占位符 {用户名} {礼物名} {数量}；空 = 内置默认「xx 送了 N 个 yy」。
+    // （旧 settings.json 无此字段 → null → 默认文案，兼容）
+    public string? TtsGiftTemplate { get; set; } = "";
 
     // 定向回复规则（弹幕命中关键词 → 不读原文，改念文字/播音频；从上往下首条命中即停）。
     public bool ReplyRulesEnabled { get; set; } = true;   // 总开关（旧 settings.json 无此字段 → 默认开，兼容）

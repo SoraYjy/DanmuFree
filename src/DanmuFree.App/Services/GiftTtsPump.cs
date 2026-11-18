@@ -46,6 +46,12 @@ public sealed class GiftTtsPump : IDisposable
         lock (_lock) _blocked = blocked;
     }
 
+    /// <summary>感谢文案模板（{用户名}/{礼物名}/{数量}；空 = 内置默认）。运行中可换，下次吐组生效。</summary>
+    public void UpdateTemplate(string? template)
+    {
+        lock (_lock) _agg.Template = string.IsNullOrWhiteSpace(template) ? null : template.Trim();
+    }
+
     private void OnTick(object? state)
     {
         lock (_lock)

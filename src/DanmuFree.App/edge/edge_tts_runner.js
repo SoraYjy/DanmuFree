@@ -101,6 +101,28 @@ function synth(voice, rate, timeoutMs, text, gec) {
 
         ws.on('error', (e) => { if (!done) { clearTimeout(killer); reject(e) } })
         ws.on('close', () => { if (!done) { clearTimeout(killer); reject(new Error('ws closed before turn.end')) } })
+        // 非 101 握手响应：ws 默认只在 error 里给「Unexpected server response: NNN」，用户看不懂。
+        // 分类成人话：403 交回调用方的时钟桶 sweep（消息里必须含 "403"）；其余多为 MS 服务端事故
+        // （2026-10-26 实测：故障期新域名回 500/200 + Bing「熊猫伞」错误页 "It's not you, it's us"、
+        // 老域名回 "Our services aren't available"——两端点同时故障页、裸连 403 风控仍活，实锤服务端事故）。
+        ws.on('unexpected-response', (req, res) => {
+            const st = res.statusCode
+            if (st === 403) {
+                // 立即释放连接再交回 sweep 换桶，否则 403 socket 要等 30s killer 才收（全 403 时最多 5 条并存）
+                clearTimeout(killer); try { ws.terminate() } catch { }
+                reject(new Error('403: handshake rejected')); return // 含 "403" → sweep 换桶重试
+            }
+            let body = ''
+            res.on('data', (c) => { if (body.length < 400) body += c.toString('utf8') })
+            res.on('end', () => {
+                if (done) return
+                clearTimeout(killer)
+                dbg(`handshake rejected status=${st} body=${JSON.stringify(body.slice(0, 120))}`)
+                reject(new Error(/not you|bingparachute|aren't available/i.test(body)
+                    ? `HTTP ${st}：微软 Edge 朗读服务端故障（返回服务中断错误页），不是本机问题，请稍后再试`
+                    : `Edge 朗读握手被拒：HTTP ${st}（200/5xx 多为微软服务端故障——2026-10-26 实测其故障期在 200/500 间抖动；若持续超半天再查本机代理/安全软件）`))
+            })
+        })
         ws.on('message', (data, isBinary) => {
             if (process.env.EDGE_TTS_DEBUG && isBinary) dbg(`bin frame len=${data.length}`)
             if (isBinary) {

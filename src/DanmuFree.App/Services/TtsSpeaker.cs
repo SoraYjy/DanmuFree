@@ -25,6 +25,14 @@ public sealed class TtsSpeaker : IDisposable
 
     public ChannelWriter<TtsItem> Writer => _channel.Writer;
 
+    private int _busy;
+    /// <summary>正在合成/播放一条（TtsHealthMonitor 见忙即让，探针不与真弹幕抢引擎）。</summary>
+    public bool IsBusy => Volatile.Read(ref _busy) == 1;
+
+    /// <summary>文本条目的合成/播放结果（成功 true / 失败 false+异常）→ TtsHealthMonitor。
+    /// 本地音频条目（定向回复播文件）不报——文件不存在/解码失败与引擎健康无关。</summary>
+    public event Action<bool, Exception?>? ResultReported;
+
     public TtsSpeaker(ITtsClient client, int capacity, FileLogger? log = null)
     {
         _client = client;
@@ -62,6 +70,11 @@ public sealed class TtsSpeaker : IDisposable
                 if (!_channel.Reader.TryRead(out var item)) continue;
                 WaveOutEvent? wo = null;
                 WaveStream? reader = null;
+                // 文本条目的成败上报健康监控（本地音频条目与引擎健康无关，不报）
+                var speech = string.IsNullOrEmpty(item.SoundPath);
+                Interlocked.Exchange(ref _busy, 1);
+                Exception? err = null;
+                var canceled = false;   // 关停取消不上报（否则 StopTts 瞬间会闪一条假「成功」）
                 try
                 {
                     // 播音频（定向回复）：直接读本地文件（不存在 → FileNotFoundException → 下方 catch 跳过）；
@@ -81,9 +94,10 @@ public sealed class TtsSpeaker : IDisposable
                     using var reg = ct.Register(() => wo.Stop());
                     await tcs.Task;
                 }
-                catch (OperationCanceledException) { throw; }
+                catch (OperationCanceledException) { canceled = true; throw; }
                 catch (Exception ex)
                 {
+                    err = ex;
                     _log?.Error("TTS 合成/播放失败，已跳过", ex);
                 }
                 finally
@@ -91,6 +105,8 @@ public sealed class TtsSpeaker : IDisposable
                     wo?.Dispose();
                     reader?.Dispose();
                     _current = null;
+                    Interlocked.Exchange(ref _busy, 0);
+                    if (speech && !canceled) ResultReported?.Invoke(err is null, err);
                 }
             }
         }

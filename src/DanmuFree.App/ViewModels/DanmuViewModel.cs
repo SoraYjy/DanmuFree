@@ -30,6 +30,7 @@ public partial class DanmuViewModel : ViewModelBase
     private TtsSpeaker? _ttsSpeaker;
     private GiftTtsPump? _giftPump;            // 礼物朗读聚合泵（连送 debounce 合并）
     private const int GiftAggregateMs = 1200;  // 礼物聚合窗口：停顿超过此值才念累计
+    private TtsHealthMonitor? _ttsHealth;      // TTS 健康心跳（60s 探针 + 真实合成结果 → 朗读 TAB 状态行）
 
     public ObservableCollection<RichMessage> Messages { get; } = new();
     // 进场 / 关注：单独一个集合 + 独立通知窗（与弹幕窗分离）。
@@ -141,6 +142,12 @@ public partial class DanmuViewModel : ViewModelBase
     [ObservableProperty] private int _ttsMaxLength = 80;
     [ObservableProperty] private int _ttsQueueCapacity = 5;
     [ObservableProperty] private string? _ttsBlockedWords = "";
+    // 礼物感谢文案模板：{用户名} {礼物名} {数量}；空 = 内置默认「xx 送了 N 个 yy」。改了即时生效
+    [ObservableProperty] private string _ttsGiftTemplate = "";
+    // TTS 健康状态行（朗读 TAB）：60s 心跳 + 真实合成结果；故障显示人话原因
+    //（如「微软 Edge 朗读服务端故障」），让用户一眼分清「软件坏了」还是「微软那边挂了」
+    [ObservableProperty] private string _ttsHealthText = "";
+    [ObservableProperty] private bool _ttsHealthWarn;
     // 用户名黑名单（朗读 TAB 可编辑列表）：这些用户的弹幕不朗读。行变化重建匹配集合（忽略大小写）。
     public ObservableCollection<MutedUserViewModel> MutedUsers { get; } = new();
     private HashSet<string> _mutedUsers = new(StringComparer.OrdinalIgnoreCase);
@@ -226,6 +233,7 @@ public partial class DanmuViewModel : ViewModelBase
         TtsMaxLength = s.TtsMaxLength;
         TtsQueueCapacity = s.TtsQueueCapacity;
         TtsBlockedWords = s.TtsBlockedWords ?? "";
+        TtsGiftTemplate = s.TtsGiftTemplate ?? "";
         // 不念用户黑名单（行模型订阅变更 → 重建匹配集合；存盘时过滤空行）
         foreach (var u in s.TtsMutedUsers)
         {
@@ -297,6 +305,16 @@ public partial class DanmuViewModel : ViewModelBase
     {
         TrimExpired();
         LogUiDrops();
+        PullTtsHealth();
+    }
+
+    // 健康状态行：1s 拉快照（内容不变时 string 相等，属性通知不触发，UI 无谓刷）
+    private void PullTtsHealth()
+    {
+        if (_ttsHealth is not { } h) return;
+        var (text, warn) = h.Snapshot();
+        TtsHealthText = text;
+        TtsHealthWarn = warn;
     }
 
     // 丢弃可见化：UiBatchPump 的 Channel(2000, DropOldest) 丢过东西就落日志（30s 节流）。
@@ -558,6 +576,7 @@ public partial class DanmuViewModel : ViewModelBase
             TtsMaxLength = TtsMaxLength,
             TtsQueueCapacity = TtsQueueCapacity,
             TtsBlockedWords = TtsBlockedWords,
+            TtsGiftTemplate = string.IsNullOrWhiteSpace(TtsGiftTemplate) ? null : TtsGiftTemplate.Trim(),
             TtsMutedUsers = MutedUsers.Select(m => m.UserName.Trim()).Where(u => u.Length > 0).ToList(),
             ReplyRulesEnabled = ReplyRulesEnabled,
             ReplyRules = ReplyRules.Select(r => new ReplyRuleConfig
@@ -579,6 +598,7 @@ public partial class DanmuViewModel : ViewModelBase
     partial void OnTtsRefAudioPathChanged(string? value) => _ttsSpeaker?.Update(BuildTtsOptions(), TtsVolume);
     partial void OnTtsPromptTextChanged(string? value) => _ttsSpeaker?.Update(BuildTtsOptions(), TtsVolume);
     partial void OnTtsBlockedWordsChanged(string? value) => _giftPump?.UpdateBlocked(ParseBlocked(TtsBlockedWords));
+    partial void OnTtsGiftTemplateChanged(string value) => _giftPump?.UpdateTemplate(value);
 
     // —— 不念用户黑名单（行编辑 → 重建匹配集合；加/删命令）——
 
@@ -630,6 +650,15 @@ public partial class DanmuViewModel : ViewModelBase
         _ttsSpeaker.Update(BuildTtsOptions(), TtsVolume);
         _ttsSpeaker.Start();
         _giftPump = new GiftTtsPump(_ttsSpeaker.Writer, ParseBlocked(TtsBlockedWords), GiftAggregateMs);
+        _giftPump.UpdateTemplate(TtsGiftTemplate);
+        // 健康心跳：独立 client 实例（不抢朗读队列、不出声；speaker 忙时让路）。
+        // canProbe 含 TtsEnabled——试听/试听回复会在开关关着时建 speaker，那时不探测（状态行留空不误导）。
+        // 订阅捕获本地实例：speaker 与监控一一配对，重启后旧 speaker 的在途结果不串进新监控。
+        _ttsHealth?.Dispose();
+        var health = new TtsHealthMonitor(CreateTtsClient, BuildTtsOptions,
+            () => TtsEnabled && _ttsSpeaker?.IsBusy != true, _log);
+        _ttsHealth = health;
+        _ttsSpeaker.ResultReported += (ok, ex) => health.NoteRealResult(ok, ex);
     }
 
     private void RestartTtsIfRunning()
@@ -646,6 +675,10 @@ public partial class DanmuViewModel : ViewModelBase
         _ttsSpeaker?.Dispose();
         _ttsSpeaker = null;
         _ttsClient = null;
+        _ttsHealth?.Dispose();  // 心跳随朗读开关同生共死；面板状态行清空
+        _ttsHealth = null;
+        TtsHealthText = "";
+        TtsHealthWarn = false;
     }
 
     private static IReadOnlyList<string> ParseBlocked(string? s) =>

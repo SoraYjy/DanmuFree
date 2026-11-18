@@ -87,6 +87,11 @@ public partial class NotifyWindow : Window
 
     private void OnClosing(object? sender, CancelEventArgs e)
     {
+        // App.IsExiting：app 退出中（退出入口已置位）→ 允许真正关闭，**不动 ShowNotifyWindow**——
+        // 此时的 Closing 是关停级联的一环，不是用户手动隐藏；若在这里改状态，主窗随后的
+        // SaveSettings 会把 false 持久化（= 每次重启窗口都被隐藏）。仅看 main.IsLoaded 判断不可靠：
+        // 关停时各窗 Closing 的先后顺序不保证（见 App.IsExiting 注释）。
+        if (App.IsExiting) return;
         var main = Application.Current?.MainWindow;
         if (main is null || !main.IsLoaded) return; // app 退出中 → 允许真正关闭
         e.Cancel = true;                            // 否则只隐藏

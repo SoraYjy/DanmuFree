@@ -41,6 +41,9 @@ public partial class DanmuWindow : Window
 
     private void OnMainClosing(object? sender, CancelEventArgs e)
     {
+        // 关主窗 = 退出 app（ShutdownMode.OnMainWindowClose）：先置退出标志（通知窗的 Closing
+        // 见标志即不动 ShowNotifyWindow，避免关停级联覆盖持久化值），再写几何 + 存盘。
+        App.IsExiting = true;
         // 关闭前把两窗几何写回 VM，再存盘（下次启动还原到相同位置）。
         _vm.MainLeft = Left; _vm.MainTop = Top;
         _vm.MainWidth = ActualWidth; _vm.MainHeight = ActualHeight;

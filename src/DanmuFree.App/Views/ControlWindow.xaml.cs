@@ -65,7 +65,11 @@ public partial class ControlWindow : Window
         return false;
     }
     private void OnMinimize(object sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;
-    private void OnExit(object sender, RoutedEventArgs e) => Application.Current.Shutdown();
+    private void OnExit(object sender, RoutedEventArgs e)
+    {
+        App.IsExiting = true;   // 先置退出标志再 Shutdown：通知窗的 Closing 不再把可见开关改成 false
+        Application.Current.Shutdown();
+    }
     private void OnQrLoginClick(object sender, RoutedEventArgs e)
     {
         var dlg = new LoginDialog { Owner = this };
